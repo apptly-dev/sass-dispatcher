@@ -17,7 +17,7 @@ hostnames; plus its routing library and admin CLI.
 
 ## Prerequisites
 
-- Node 22.11+
+- Node 24+ (see `.node-version`)
 - pnpm 10.33+
 
 ## Quickstart
