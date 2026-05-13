@@ -1,0 +1,41 @@
+{
+  "name": "@apptly/sass-dispatcher-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Apptly SaaS dispatcher Cloudflare Worker",
+  "author": "Apptly Software Ltd <oss@apptly.co>",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "clean": "rimraf dist .wrangler node_modules coverage",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "lint": "eslint --fix .",
+    "lint:check": "eslint .",
+    "prepack": "run-s lint:check type-check build test",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "type-check": "run-s type-check:main type-check:tools type-check:tests",
+    "type-check:main": "tsc --noEmit -p tsconfig.json",
+    "type-check:tests": "tsc --noEmit -p tsconfig.tests.json",
+    "type-check:tools": "tsc --noEmit -p tsconfig.tools.json"
+  },
+  "dependencies": {
+    "@apptly/sass-dispatcher": "workspace:^"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.13.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@poupe/eslint-config": "~0.9.1",
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-istanbul": "^4.1.5",
+    "eslint": "^9.39.4",
+    "npm-run-all2": "^8.0.4",
+    "rimraf": "^6.1.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "wrangler": "^4.72.0"
+  }
+}

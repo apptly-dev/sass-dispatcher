@@ -1,0 +1,23 @@
+# cspell:words sass miniflare
+# TODO: set account_id before deploying.
+# account_id = ""
+name = "sass-dispatcher"
+main = "src/index.ts"
+# Pinned to the workerd shipped by @cloudflare/vitest-pool-workers'
+# bundled wrangler; raise alongside that dep when it ships a newer
+# miniflare.
+compatibility_date = "2026-03-17"
+compatibility_flags = [
+  "nodejs_compat",
+  "enable_nodejs_tty_module",
+  "enable_nodejs_fs_module",
+  "enable_nodejs_http_modules",
+  "enable_nodejs_perf_hooks_module",
+  "enable_nodejs_v8_module",
+  "enable_nodejs_process_v2",
+]
+
+[dev]
+ip = "0.0.0.0"
+
+# Bindings (D1, KV, R2, services) go here as the dispatcher grows.

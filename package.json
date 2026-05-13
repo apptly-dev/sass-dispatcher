@@ -1,0 +1,42 @@
+{
+  "name": "sass-dispatcher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Apptly SaaS dispatcher monorepo (worker + cli)",
+  "author": "Apptly Software Ltd <oss@apptly.co>",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean && rimraf node_modules",
+    "cli": "node ./apps/cli/dist/bin.mjs",
+    "cspell": "cspell --config internal/build/cspell.json --gitignore --no-progress '**'",
+    "deploy": "pnpm --filter @apptly/sass-dispatcher-worker deploy",
+    "dev": "pnpm --filter @apptly/sass-dispatcher-worker dev",
+    "dev:prepare": "pnpm -r dev:prepare",
+    "lint": "run-s lint:root cspell lint:_packages",
+    "lint:_packages": "pnpm -r lint",
+    "lint:check": "run-s lint:root:check cspell lint:check:_packages",
+    "lint:check:_packages": "pnpm -r lint:check",
+    "lint:root": "eslint --fix --ignore-pattern 'apps/*' --ignore-pattern 'packages/*' .",
+    "lint:root:check": "eslint --ignore-pattern 'apps/*' --ignore-pattern 'packages/*' .",
+    "precommit": "run-s dev:prepare lint type-check build test",
+    "prepack": "run-s lint:root:check prepack:_packages",
+    "prepack:_packages": "pnpm -r prepack",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "@poupe/eslint-config": "~0.9.1",
+    "cspell": "^10.0.0",
+    "eslint": "^9.39.4",
+    "npm-run-all2": "^8.0.4",
+    "rimraf": "^6.1.3"
+  },
+  "engines": {
+    "node": ">= 22.11.0",
+    "pnpm": ">= 10.33.2"
+  },
+  "packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8"
+}

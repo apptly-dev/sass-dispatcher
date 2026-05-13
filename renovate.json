@@ -1,0 +1,27 @@
+{
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "groupName": "eslint dependencies",
+      "groupSlug": "eslint",
+      "matchPackageNames": [
+        "/eslint/"
+      ]
+    },
+    {
+      "groupName": "cloudflare dependencies",
+      "groupSlug": "cloudflare",
+      "matchPackageNames": [
+        "/^@cloudflare//",
+        "wrangler"
+      ]
+    }
+  ],
+  "postUpdateOptions": [
+    "pnpmDedupe"
+  ],
+  "rangeStrategy": "bump"
+}
