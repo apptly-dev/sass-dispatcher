@@ -35,3 +35,6 @@ pnpm precommit      # lint + type-check + build + test
 - `pnpm test` — run every vitest suite.
 - `pnpm cf:deploy` — `wrangler deploy` every package with a
   `cf:deploy` script (currently just the worker).
+- `pnpm cf:preview` — `wrangler versions upload` for every
+  package with a `cf:preview` script; uploads a new version
+  without activating it and prints a preview URL.

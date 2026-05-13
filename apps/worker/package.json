@@ -9,6 +9,7 @@
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir=dist",
     "cf:deploy": "wrangler deploy",
+    "cf:preview": "wrangler versions upload",
     "clean": "rimraf dist .wrangler node_modules coverage",
     "dev": "wrangler dev",
     "lint": "eslint --fix .",
