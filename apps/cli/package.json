@@ -30,7 +30,11 @@
   },
   "dependencies": {
     "@apptly/sass-dispatcher": "workspace:^",
-    "citty": "^0.1.6"
+    "citty": "^0.2.2",
+    "cloudflare": "^6.1.0",
+    "confbox": "^0.2.4",
+    "consola": "^3.4.2",
+    "xdg-app-paths": "^8.3.0"
   },
   "devDependencies": {
     "@kagal/cross-test": "^0.1.3",

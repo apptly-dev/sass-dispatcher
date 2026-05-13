@@ -1,21 +1,20 @@
 import { runCommand } from 'citty';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { main } from '../index';
 
 describe('main', () => {
-  it('runs the stub and writes the banner to stdout', async () => {
-    const writes: string[] = [];
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(
-      (chunk) => {
-        writes.push(String(chunk));
-        return true;
-      },
-    );
+  it('throws E_NO_COMMAND when invoked with no subcommand', async () => {
+    await expect(runCommand(main, { rawArgs: [] })).rejects.toMatchObject({
+      name: 'CLIError',
+      code: 'E_NO_COMMAND',
+    });
+  });
 
-    await runCommand(main, { rawArgs: [] });
-
-    expect(writes.join('')).toContain('sass-dispatcher (stub)');
-    spy.mockRestore();
+  it('throws E_UNKNOWN_COMMAND for an unrecognised subcommand', async () => {
+    await expect(runCommand(main, { rawArgs: ['bogus'] })).rejects.toMatchObject({
+      name: 'CLIError',
+      code: 'E_UNKNOWN_COMMAND',
+    });
   });
 });
