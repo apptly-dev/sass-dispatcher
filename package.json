@@ -8,10 +8,10 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "pnpm -r build",
+    "cf:deploy": "pnpm -r --workspace-concurrency=1 run cf:deploy",
     "clean": "pnpm -r clean && rimraf node_modules",
     "cli": "node ./apps/cli/dist/bin.mjs",
     "cspell": "cspell --config internal/build/cspell.json --gitignore --no-progress '**'",
-    "deploy": "pnpm --filter @apptly/sass-dispatcher-worker deploy",
     "dev": "pnpm --filter @apptly/sass-dispatcher-worker dev",
     "dev:prepare": "pnpm -r dev:prepare",
     "lint": "run-s lint:root cspell lint:_packages",

@@ -33,4 +33,5 @@ pnpm precommit      # lint + type-check + build + test
 - `pnpm cli` — invoke the admin CLI.
 - `pnpm build` — build all packages.
 - `pnpm test` — run every vitest suite.
-- `pnpm deploy` — `wrangler deploy` the worker.
+- `pnpm cf:deploy` — `wrangler deploy` every package with a
+  `cf:deploy` script (currently just the worker).

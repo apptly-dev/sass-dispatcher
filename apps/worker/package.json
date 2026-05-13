@@ -8,8 +8,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir=dist",
+    "cf:deploy": "wrangler deploy",
     "clean": "rimraf dist .wrangler node_modules coverage",
-    "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "lint": "eslint --fix .",
     "lint:check": "eslint .",
