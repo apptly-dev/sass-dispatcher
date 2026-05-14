@@ -4,6 +4,17 @@ import { consola } from 'consola';
 
 import { main } from './index';
 
+// Treat a closed stdout (e.g., `| head -3`) as a clean exit
+// rather than letting the unhandled 'error' event crash the
+// process with a stack trace. Node's default is to throw, which
+// is the wrong behaviour for a piped CLI.
+process.stdout.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EPIPE') {
+    process.exit(0);
+  }
+  throw error;
+});
+
 type ShowUsage = typeof cittyShowUsage;
 
 /**

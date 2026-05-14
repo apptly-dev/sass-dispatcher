@@ -39,6 +39,16 @@ pnpm precommit      # lint + type-check + build + test
   package with a `cf:preview` script; uploads a new version
   without activating it and prints a preview URL.
 
+## Local credentials
+
+`pnpm cli` loads `<repo-root>/.env` via Node's
+`--env-file-if-exists` flag when present. The file is
+gitignored — drop `CLOUDFLARE_API_TOKEN=…` in there to
+avoid touching wrangler/exporting in every shell. Direct
+invocation (`node ./apps/cli/dist/bin.mjs`) doesn't read
+`.env` — that's deliberate, so scripted use stays explicit
+about its environment.
+
 ## Scripting the CLI
 
 Scriptable commands like `zones list` and `zones get`

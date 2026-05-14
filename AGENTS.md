@@ -37,12 +37,23 @@ unconditionally; the library file only exports
 
 ## Root CLI invocation
 
-`pnpm cli` runs `node ./apps/cli/dist/bin.mjs`
+`pnpm cli` runs
+`node --env-file-if-exists=.env ./apps/cli/dist/bin.mjs`
 directly — no bin symlink, no root devDep on the
 app. The `dist/bin.mjs` file exists from the
 `prepare` lifecycle (`cross-test -s … || obuild
 --stub`) so it's available immediately after
-`pnpm install`.
+`pnpm install`. The `--env-file-if-exists` flag
+loads `<repo-root>/.env` (gitignored) when present
+so `CLOUDFLARE_API_TOKEN` can live there for local
+dev; direct `node` invocations skip it on purpose
+so scripted callers stay explicit about their env.
+
+`bin.ts` installs an EPIPE swallower on
+`process.stdout` so a downstream consumer closing
+the pipe early (`pnpm cli zones list | head -3`)
+exits cleanly instead of crashing with an
+unhandled `'error'` event.
 
 ## CLI output conventions
 

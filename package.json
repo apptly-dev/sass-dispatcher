@@ -11,7 +11,7 @@
     "cf:deploy": "pnpm -r --workspace-concurrency=1 run cf:deploy",
     "cf:preview": "pnpm -r --workspace-concurrency=1 run cf:preview",
     "clean": "pnpm -r clean && rimraf node_modules",
-    "cli": "node ./apps/cli/dist/bin.mjs",
+    "cli": "node --env-file-if-exists=.env ./apps/cli/dist/bin.mjs",
     "cspell": "cspell --config internal/build/cspell.json --gitignore --no-progress '**'",
     "dev": "pnpm --filter @apptly/sass-dispatcher-worker dev",
     "dev:prepare": "pnpm -r dev:prepare",
