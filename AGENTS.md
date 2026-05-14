@@ -148,10 +148,29 @@ through to `notFound` for every request;
 matcher-driven routing lands later. The worker
 demonstrates the API with a banner `notFound` and
 no routes. The CLI carries `whoami` (auth pipeline)
-and `zones list` / `zones get` (read-only
-Cloudflare zone lookups) so far. Both default to
-plain space-separated fields per line and accept
-`--json` to switch the data stream to one JSON
-envelope per record (NDJSON for `list`, a single
-envelope for `get`) — pick whichever scripting
-target, `awk`/`cut` or `jq`, suits the consumer.
+plus the read-only inspection commands `zones list`,
+`zones get <zone>`, `hostnames list <zone>`, and
+`fallback get <zone>`.
+
+`zones get` is the aggregated diagnostic view —
+after resolving the zone it fetches custom
+hostnames and the SaaS fallback origin in parallel
+and emits labelled multi-line sections (or a
+composite `{ zone, hostnames, fallback }` envelope
+under `--json`). The per-resource commands cover the
+same data sliced one resource at a time for
+scripted single-resource access. A zone with no
+fallback returns 404 from CF; `zones get` catches
+that and renders `fallback: unset` (plain) or omits
+the `fallback` key (JSON) so the aggregator
+survives fresh zones. All other commands surface
+plain space-separated rows by default, with
+`--json` switching to NDJSON (`list`) or a single
+envelope (`get`).
+
+`--json` currently echoes the full CF SDK envelope
+for every resource — large, but easy to project
+later with `jq`. A future `--verbose` flag will
+flip the default to a curated projection of the
+fields the CLI actually surfaces, keeping the raw
+shape behind the flag.

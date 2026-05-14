@@ -51,7 +51,8 @@ about its environment.
 
 ## Scripting the CLI
 
-Scriptable commands like `zones list` and `zones get`
+Scriptable commands like `zones list`,
+`hostnames list <zone>`, and `fallback get <zone>`
 write data rows directly to stdout, one row per line;
 warnings and errors go to stderr. The default row
 shape is space-separated fields, safe for piping into
@@ -60,6 +61,12 @@ the data stream to one JSON envelope per record
 (NDJSON for `list`, a single envelope for `get`) when
 you want richer fields under `jq`.
 
+`zones get <zone>` is the aggregated diagnostic view —
+it prints labelled sections covering zone metadata,
+custom hostnames, and the SaaS fallback origin. Under
+`--json` it emits a single composite envelope
+(`{ zone, hostnames, fallback }`).
+
 When invoked as `pnpm cli`, pnpm itself prints a three-line
 script banner (the `> @apptly/...` headers and a blank
 line) to stdout before forwarding the command output. To
@@ -67,7 +74,8 @@ get a clean stdout for scripting, pass `--silent` to pnpm:
 
 ```sh
 pnpm --silent cli zones list | wc -l   # exact zone count
-pnpm --silent cli zones list --json | jq -r '.name'
+pnpm --silent cli hostnames list apptly.me --json | jq -r '.hostname'
+pnpm --silent cli zones get apptly.me --json | jq -r '.hostnames[].hostname'
 ```
 
 Calling the built binary directly

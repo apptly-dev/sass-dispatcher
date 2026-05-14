@@ -1,6 +1,8 @@
 import { defineCommand } from 'citty';
 import pkg from '../package.json';
 
+import fallback from './commands/fallback';
+import hostnames from './commands/hostnames';
 import whoami from './commands/whoami';
 import zones from './commands/zones';
 
@@ -22,5 +24,5 @@ export const main = defineCommand({
     version: pkg.version,
     description: 'Apptly SaaS dispatcher admin CLI',
   },
-  subCommands: { whoami, zones },
+  subCommands: { whoami, zones, hostnames, fallback },
 });

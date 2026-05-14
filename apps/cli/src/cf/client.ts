@@ -2,10 +2,14 @@ import Cloudflare from 'cloudflare';
 
 import {
   type Auth,
+  type CustomHostname,
+  type FallbackOrigin,
   type TokenVerifyResponse,
   type UserGetResponse,
   type Zone,
 } from '../types';
+import * as customHostnames from './custom-hostnames';
+import * as fallbackOrigin from './fallback-origin';
 import * as zones from './zones';
 
 /**
@@ -52,6 +56,14 @@ export class Client {
 
   zonesGet(name: string): Promise<undefined | Zone> {
     return zones.get(this.#raw, name);
+  }
+
+  customHostnamesList(zoneId: string): Promise<CustomHostname[]> {
+    return customHostnames.list(this.#raw, zoneId);
+  }
+
+  fallbackOriginGet(zoneId: string): Promise<FallbackOrigin> {
+    return fallbackOrigin.get(this.#raw, zoneId);
   }
 }
 

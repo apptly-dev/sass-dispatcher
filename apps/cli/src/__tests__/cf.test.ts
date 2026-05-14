@@ -5,11 +5,15 @@ import { APIError, Client } from '../cf';
 import { type Auth } from '../types';
 
 const {
+  customHostnamesListMock,
+  fallbackOriginGetMock,
   sdkConstructorSpy,
   userGetMock,
   verifyMock,
   zonesListMock,
 } = vi.hoisted(() => ({
+  customHostnamesListMock: vi.fn(),
+  fallbackOriginGetMock: vi.fn(),
   sdkConstructorSpy: vi.fn(),
   userGetMock: vi.fn(),
   verifyMock: vi.fn(),
@@ -19,12 +23,21 @@ const {
 vi.mock('cloudflare', async () => {
   const actual = await vi.importActual<typeof import('cloudflare')>('cloudflare');
   class FakeCloudflare {
+    customHostnames: {
+      fallbackOrigin: { get: typeof fallbackOriginGetMock }
+      list: typeof customHostnamesListMock
+    };
+
     user: { get: typeof userGetMock; tokens: { verify: typeof verifyMock } };
     zones: { list: typeof zonesListMock };
     constructor(options: { apiToken?: string } = {}) {
       sdkConstructorSpy(options);
       this.user = { get: userGetMock, tokens: { verify: verifyMock } };
       this.zones = { list: zonesListMock };
+      this.customHostnames = {
+        list: customHostnamesListMock,
+        fallbackOrigin: { get: fallbackOriginGetMock },
+      };
     }
   }
   return { ...actual, default: FakeCloudflare };
@@ -48,6 +61,8 @@ describe('cf Client', () => {
     userGetMock.mockReset();
     verifyMock.mockReset();
     zonesListMock.mockReset();
+    customHostnamesListMock.mockReset();
+    fallbackOriginGetMock.mockReset();
   });
 
   it('constructs the SDK with the auth token and no retries', () => {
@@ -130,5 +145,28 @@ describe('cf Client', () => {
     const result = await new Client(makeAuth()).zonesGet('absent.example');
 
     expect(result).toBeUndefined();
+  });
+
+  it('drains the paginated iterator from customHostnamesList()', async () => {
+    const hostnames = [
+      { id: 'ch-1', hostname: 'taistamp.org', status: 'active' },
+      { id: 'ch-2', hostname: 'example.com', status: 'pending' },
+    ];
+    customHostnamesListMock.mockReturnValueOnce(asyncIterableFromArray(hostnames));
+
+    const result = await new Client(makeAuth()).customHostnamesList('zone-1');
+
+    expect(result).toEqual(hostnames);
+    expect(customHostnamesListMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
+  });
+
+  it('passes the zone_id through to fallbackOriginGet()', async () => {
+    const expected = { origin: 'fallback.example.com', status: 'active' };
+    fallbackOriginGetMock.mockResolvedValueOnce(expected);
+
+    const result = await new Client(makeAuth()).fallbackOriginGet('zone-1');
+
+    expect(result).toBe(expected);
+    expect(fallbackOriginGetMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
   });
 });
