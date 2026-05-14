@@ -53,8 +53,12 @@ about its environment.
 
 Scriptable commands like `zones list` and `zones get`
 write data rows directly to stdout, one row per line;
-warnings and errors go to stderr. Output is safe for
-piping into `awk`, `xargs`, `cut`, etc.
+warnings and errors go to stderr. The default row
+shape is space-separated fields, safe for piping into
+`awk`, `xargs`, `cut`, etc. Pass `--json` to switch
+the data stream to one JSON envelope per record
+(NDJSON for `list`, a single envelope for `get`) when
+you want richer fields under `jq`.
 
 When invoked as `pnpm cli`, pnpm itself prints a three-line
 script banner (the `> @apptly/...` headers and a blank
@@ -63,6 +67,7 @@ get a clean stdout for scripting, pass `--silent` to pnpm:
 
 ```sh
 pnpm --silent cli zones list | wc -l   # exact zone count
+pnpm --silent cli zones list --json | jq -r '.name'
 ```
 
 Calling the built binary directly

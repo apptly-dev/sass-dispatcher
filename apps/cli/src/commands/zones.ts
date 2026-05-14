@@ -9,8 +9,9 @@ function formatZone(zone: Zone): string {
   return `${zone.id} ${zone.name} ${zone.status ?? 'unknown'}`;
 }
 
-function writeZoneRow(zone: Zone): void {
-  process.stdout.write(`${formatZone(zone)}\n`);
+function writeZoneRow(zone: Zone, json: boolean): void {
+  const line = json ? JSON.stringify(zone) : formatZone(zone);
+  process.stdout.write(`${line}\n`);
 }
 
 const list = defineCommand({
@@ -18,7 +19,14 @@ const list = defineCommand({
     name: 'list',
     description: 'List zones visible to the active credential',
   },
-  run: async () => {
+  args: {
+    json: {
+      type: 'boolean',
+      description: 'Emit one JSON envelope per row instead of plain fields',
+      default: false,
+    },
+  },
+  run: async ({ args }) => {
     await withClient(async ({ client }) => {
       const zones = await client.zonesList();
       if (zones.length === 0) {
@@ -28,7 +36,7 @@ const list = defineCommand({
         consola.warn('no zones visible to this credential');
         return;
       }
-      for (const zone of zones) writeZoneRow(zone);
+      for (const zone of zones) writeZoneRow(zone, args.json);
     });
   },
 });
@@ -44,6 +52,11 @@ const get = defineCommand({
       description: 'Zone name (e.g., apptly.me)',
       required: true,
     },
+    json: {
+      type: 'boolean',
+      description: 'Emit the full JSON envelope instead of plain fields',
+      default: false,
+    },
   },
   run: async ({ args }) => {
     await withClient(async ({ client }) => {
@@ -52,7 +65,7 @@ const get = defineCommand({
         fatal(`no zone matching ${args.name}`);
         return;
       }
-      writeZoneRow(zone);
+      writeZoneRow(zone, args.json);
     });
   },
 });

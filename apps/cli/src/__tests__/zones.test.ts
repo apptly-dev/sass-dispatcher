@@ -183,4 +183,25 @@ describe('cli zones', () => {
     expect(process.exitCode).toBe(1);
     expect(zonesListSpy).not.toHaveBeenCalled();
   });
+
+  it('list emits NDJSON envelopes when --json is set', async () => {
+    const first = makeZone();
+    const second = makeZone({ id: 'zone-2', name: 'taistamp.org', status: 'pending' });
+    zonesListSpy.mockResolvedValue([first, second]);
+
+    await runCommand(zones, { rawArgs: ['list', '--json'] });
+
+    expect(captured.stdout.join('')).toBe(
+      `${JSON.stringify(first)}\n${JSON.stringify(second)}\n`,
+    );
+  });
+
+  it('get emits the full JSON envelope when --json is set', async () => {
+    const envelope = makeZone();
+    zonesGetSpy.mockResolvedValue(envelope);
+
+    await runCommand(zones, { rawArgs: ['get', 'apptly.me', '--json'] });
+
+    expect(captured.stdout.join('')).toBe(`${JSON.stringify(envelope)}\n`);
+  });
 });

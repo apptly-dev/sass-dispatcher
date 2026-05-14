@@ -149,4 +149,9 @@ matcher-driven routing lands later. The worker
 demonstrates the API with a banner `notFound` and
 no routes. The CLI carries `whoami` (auth pipeline)
 and `zones list` / `zones get` (read-only
-Cloudflare zone lookups) so far.
+Cloudflare zone lookups) so far. Both default to
+plain space-separated fields per line and accept
+`--json` to switch the data stream to one JSON
+envelope per record (NDJSON for `list`, a single
+envelope for `get`) — pick whichever scripting
+target, `awk`/`cut` or `jq`, suits the consumer.
