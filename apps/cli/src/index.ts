@@ -2,6 +2,7 @@ import { defineCommand } from 'citty';
 import pkg from '../package.json';
 
 import whoami from './commands/whoami';
+import zones from './commands/zones';
 
 /**
  * sass-dispatcher admin CLI — scaffold entry. Subcommands
@@ -21,5 +22,5 @@ export const main = defineCommand({
     version: pkg.version,
     description: 'Apptly SaaS dispatcher admin CLI',
   },
-  subCommands: { whoami },
+  subCommands: { whoami, zones },
 });

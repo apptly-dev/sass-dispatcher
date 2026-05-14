@@ -4,13 +4,16 @@ import { consola } from 'consola';
 
 import { main } from './index';
 
+type ShowUsage = typeof cittyShowUsage;
+
 /**
- * Replacement for citty's default `showUsage` so its
- * error-path renders also route through consola, keeping
- * one output channel across the CLI.
+ * Replacement for citty's default `showUsage` so the banner
+ * goes through consola — `warn` (level 1) routes to stderr,
+ * keeping stdout reserved for command data. The WARN
+ * decoration is acceptable for help/usage output.
  */
-const showUsage: typeof cittyShowUsage = async (cmd, parent) => {
-  consola.log(await renderUsage(cmd, parent));
+const showUsage: ShowUsage = async (cmd, parent) => {
+  consola.warn(await renderUsage(cmd, parent));
 };
 
 runMain(main, { showUsage });

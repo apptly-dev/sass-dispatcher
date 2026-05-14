@@ -1,8 +1,7 @@
 import { defineCommand } from 'citty';
 import { consola } from 'consola';
 
-import { AuthError, loadAuth } from '../auth';
-import { APIError, Client } from '../cf';
+import { withClient } from '../lifecycle';
 import {
   type Auth,
   type TokenVerifyResponse,
@@ -49,15 +48,9 @@ function reportUser(auth: Auth, user: UserGetResponse): void {
   }
 }
 
-function reportAPIError(error: APIError): void {
-  const detail = error.errors[0]?.message ?? error.message;
-  const status = error.status === undefined ? '' : `[HTTP ${error.status}] `;
-  consola.error(`${status}${detail}`);
-}
-
 /**
  * `cli whoami` — resolves the active Cloudflare credentials
- * via {@link loadAuth} and verifies them against the API. The
+ * via {@link withClient} and verifies them against the API. The
  * endpoint depends on the credential type: API tokens (env)
  * go through `GET /user/tokens/verify`; wrangler-borrowed
  * OAuth bearers use `GET /user`. With `--verbose`, the
@@ -78,34 +71,13 @@ export default defineCommand({
     },
   },
   run: async ({ args }) => {
-    let auth: Auth;
-    try {
-      auth = await loadAuth();
-    } catch (error) {
-      if (error instanceof AuthError) {
-        consola.error(error.message);
-        process.exitCode = 1;
-        return;
-      }
-      throw error;
-    }
-
-    const client = new Client(auth);
-    try {
+    await withClient(async ({ auth, client }) => {
       if (auth.source === 'env') {
         reportToken(auth, await client.tokensVerify());
       } else {
         reportUser(auth, await client.userGet());
       }
-    } catch (error) {
-      if (error instanceof APIError) {
-        reportAPIError(error);
-        process.exitCode = 1;
-        return;
-      }
-      throw error;
-    }
-
-    if (args.verbose) reportVerbose(auth);
+      if (args.verbose) reportVerbose(auth);
+    });
   },
 });

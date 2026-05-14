@@ -38,3 +38,23 @@ pnpm precommit      # lint + type-check + build + test
 - `pnpm cf:preview` — `wrangler versions upload` for every
   package with a `cf:preview` script; uploads a new version
   without activating it and prints a preview URL.
+
+## Scripting the CLI
+
+Scriptable commands like `zones list` and `zones get`
+write data rows directly to stdout, one row per line;
+warnings and errors go to stderr. Output is safe for
+piping into `awk`, `xargs`, `cut`, etc.
+
+When invoked as `pnpm cli`, pnpm itself prints a three-line
+script banner (the `> @apptly/...` headers and a blank
+line) to stdout before forwarding the command output. To
+get a clean stdout for scripting, pass `--silent` to pnpm:
+
+```sh
+pnpm --silent cli zones list | wc -l   # exact zone count
+```
+
+Calling the built binary directly
+(`node ./apps/cli/dist/bin.mjs zones list`) is clean
+without any flag.
