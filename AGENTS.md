@@ -1,4 +1,4 @@
-<!-- cspell:words evals tlnp -->
+<!-- cspell:words cfat cfut evals tlnp -->
 # Agent context
 
 Non-obvious choices in this scaffold.
@@ -254,6 +254,78 @@ later with `jq`. A future `--verbose` flag will
 flip the default to a curated projection of the
 fields the CLI actually surfaces, keeping the raw
 shape behind the flag.
+
+## CF API token recipe
+
+`<repo-root>/.env` carries two CF API tokens, both
+read-only and scoped to the Apptly Software
+account. The split exists because Cloudflare's
+**account-owned** tokens (`cfat_`, minted at
+`/<account-id>/api-tokens`) and **user-owned**
+tokens (`cfut_`, minted at `/profile/api-tokens`)
+have disjoint permission catalogues — neither alone
+covers the dispatcher's full surface.
+
+### `sass-dispatcher-hopeful` (account-owned, 1y)
+
+The default token used by `pnpm cli`. Minted at
+`https://dash.cloudflare.com/<account-id>/api-tokens`.
+Curated read-only scopes against the Entire Apptly
+Software account:
+
+- **Account & Billing:** `Account API Tokens`,
+  `Account Settings` (Read)
+- **Developer Platform:** `Workers Scripts`,
+  `Workers Tail`, `Workers Observability` (Read)
+- **DNS & Zones:** `Account DNS Settings`,
+  `DNS View` (Read)
+- **Cache & Performance:** `Account SSL & Certificates`
+  (Read)
+
+What it covers: `zones list/get`, `whoami` (against
+the account-scoped verify endpoint
+`/accounts/{id}/tokens/verify`), worker
+tail/observability, account DNS settings.
+
+What it does **not** cover (no account-owned
+permission item exists for these as of May 2026):
+custom hostnames, workers routes, per-zone DNS
+records, per-zone SSL settings.
+
+### `sass-dispatcher-greedy` (user-owned, 1m)
+
+User API Token minted at `/profile/api-tokens`,
+tied to <amery@apptly.co>. Used for the commands the
+hopeful token cannot serve (`hostnames list`,
+`bindings list`'s routes side, zone-scoped diags).
+1-month TTL because user-owned + full catalogue =
+larger blast radius.
+
+Scopes (Read on every line):
+
+- **Account →** Workers Scripts, Workers Tail,
+  Account Settings
+- **Zone → All zones from an account → Apptly Software:**
+  Zone, Zone Settings, DNS, SSL and Certificates,
+  Workers Routes, Custom Hostnames
+- **User →** User Details, User API Tokens (for
+  the `cfut_` verify path), Memberships (feeds
+  planned account-id detection)
+
+### Common rules
+
+- TTL: see above per token. Renew by repeating the
+  recipe; replace the relevant entry in
+  `<repo-root>/.env`.
+- Edit-level scopes (Workers Scripts: Edit,
+  DNS: Edit, etc.) are deliberately omitted —
+  deploys go through `wrangler` with its own
+  credential flow, so these tokens stay
+  read-only.
+- The CLI today switches tokens by editing
+  `CLOUDFLARE_API_TOKEN=` in `.env`. A
+  per-command token selector is planned but
+  not implemented.
 
 ## Account-scoped operations
 
