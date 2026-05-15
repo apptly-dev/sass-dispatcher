@@ -1,9 +1,11 @@
+<!-- cspell:words originless -->
 # sass-dispatcher
 
 Apptly SaaS dispatcher monorepo. The Cloudflare
-Worker bound to `apptly.me` (APEX), acting as the
-Cloudflare-for-SaaS fallback for tenant custom
-hostnames; plus its routing library and admin CLI.
+Worker bound to the `apptly.me` SaaS zone via a
+`*/*` Worker Route, fielding every tenant custom
+hostname forwarded through Cloudflare-for-SaaS; plus
+its routing library and admin CLI.
 
 ## Layout
 
@@ -55,6 +57,45 @@ Custom Domains, eventually dispatch namespaces) also need
 will land later; today the env var is the only source, and
 those operations skip with a warning when it's unset.
 
+## Cloudflare-for-SaaS setup
+
+Two zone-level prerequisites turn a SaaS zone into the
+fallback target for tenant custom hostnames, per
+Cloudflare's [`worker-as-origin` guide][cf-was]:
+
+1. **Originless fallback-origin DNS record.** Add a
+   placeholder DNS record matching the configured
+   fallback-origin hostname (set under SaaS →
+   Configuration → Fallback Origin in the dashboard).
+   An AAAA pointing to `100::`, proxied through
+   Cloudflare, is the canonical placeholder — the
+   public answer is CF anycast, the record never
+   actually serves traffic (the Worker Route catches
+   first), but it must resolve or CF SaaS rejects the
+   request with HTTP 530.
+2. **`*/*` Worker Route on the zone, bound to
+   `sass-dispatcher`.** This is what catches tenant
+   traffic. The CF SaaS edge forwards
+   `Host: tenant.example` requests into the zone; the
+   `*/*` route matches before the origin fetch and the
+   worker fires with the tenant hostname intact.
+   Without this route, CF tries to fetch the
+   originless placeholder as a real origin and returns
+   HTTP 522.
+
+A Worker Custom Domain on the apex is **not** what
+catches SaaS-fallback traffic — Custom Domains are
+hostname-specific bindings. The `*/*` route handles
+direct apex traffic too, so a Custom Domain is
+redundant once the route is in place.
+
+Verify the zone with `pnpm cli zones get <zone>` once
+both prerequisites are in place: the `fallback:` line
+should show the configured hostname `active`, the
+bindings section should list a `*/*` route bound to
+`sass-dispatcher`, and `pnpm cli dns <fallback-host>
+--type AAAA` should return CF anycast addresses.
+
 ## Scripting the CLI
 
 Scriptable commands like `zones list`,
@@ -83,11 +124,18 @@ route  <id> <pattern>  <script>
 domain <id> <hostname> <service>
 ```
 
-Each row's first field tags the kind, making it easy
-to spot whether a zone is served by a legacy Worker
-Route (Host/path pattern match) or a Worker Custom
-Domain (which catches SaaS fallback traffic). Worker
-Custom Domains is account-scoped, so
+Each row's first field tags the kind:
+
+- **Worker Route** — Host/path pattern match. `*/*`
+  catches everything entering the zone, including
+  Cloudflare-for-SaaS fallback traffic for tenant
+  custom hostnames (see
+  [setup](#cloudflare-for-saas-setup)).
+- **Worker Custom Domain** — hostname-specific binding
+  for direct traffic to that one hostname; does not
+  catch SaaS-fallback traffic.
+
+Worker Custom Domains is account-scoped, so
 `CLOUDFLARE_ACCOUNT_ID` must be set or the domains
 half is skipped with a stderr warning.
 
@@ -96,9 +144,10 @@ endpoint (`cloudflare-dns.com/dns-query`)
 anonymously — no `CLOUDFLARE_API_TOKEN` needed.
 `--type` selects the record type (default `A`); rows
 are `<name> <TTL> <type> <data>`. Useful for
-sanity-checking what CF SaaS would resolve during
-fallback forwarding when `dig`/`host` aren't on the
-machine.
+confirming the originless fallback record resolves
+(see [setup](#cloudflare-for-saas-setup)) and for
+tenant-hostname CNAME-chain checks when `dig`/`host`
+aren't on the machine.
 
 When invoked as `pnpm cli`, pnpm itself prints a three-line
 script banner (the `> @apptly/...` headers and a blank
@@ -116,3 +165,5 @@ pnpm --silent cli dns apptly.me --type AAAA
 Calling the built binary directly
 (`node ./apps/cli/dist/bin.mjs zones list`) is clean
 without any flag.
+
+[cf-was]: https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/
