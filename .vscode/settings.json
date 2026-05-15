@@ -2,5 +2,15 @@
   "cSpell.import": [
     "internal/build/cspell.json"
   ],
-  "cSpell.language": "en-GB"
+  "cSpell.language": "en-GB",
+  "remote.portsAttributes": {
+    "9237": {
+      "label": "ssh-chrome-remote",
+      "onAutoForward": "ignore"
+    },
+    "9337": {
+      "label": "ssh-chrome-local",
+      "onAutoForward": "ignore"
+    }
+  }
 }

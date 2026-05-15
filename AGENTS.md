@@ -1,3 +1,4 @@
+<!-- cspell:words evals tlnp -->
 # Agent context
 
 Non-obvious choices in this scaffold.
@@ -109,6 +110,62 @@ through a browser (e.g., minting a CF API token),
 print the URL and `consola.prompt` for the paste
 back. Same UX shape as OAuth device flow, minus
 the protocol.
+
+## Browser pairing (chrome-devtools MCP)
+
+`.mcp.json` wires `chrome-devtools-mcp@latest` to
+`http://127.0.0.1:9337` so an agent can observe a
+shared browser session (DOM, console, network) via
+the `mcp__chrome-devtools__*` tool family. The
+human drives the browser; the agent only reads
+(and optionally clicks/evals to assist).
+
+Bring the pairing up with `./ssh-chrome.sh <PORT>`:
+the script opens a **visible** Chrome on the host's
+`DISPLAY=:0` (`172.17.0.1` over SSH) with
+`--remote-debugging-port=<PORT>` and an SSH
+local-forward at container `127.0.0.1:$((PORT+100))`
+→ host `127.0.0.1:<PORT>`. Default `PORT=9237`
+gives a container-side `9337` which matches
+`.mcp.json`. After editing `.mcp.json`, an in-prompt
+`/mcp reconnect` is enough to repoint the running
+MCP server — no full Claude Code restart needed.
+
+**Why asymmetric ports** (LOCAL = PORT + 100): VS
+Code Remote's port auto-forward can grab whichever
+container port the SSH tunnel exposes and forward
+it to the dev machine, where it then collides with
+chrome's bind on the same number. Keeping the
+container-side port distinct from the host-side
+port sidesteps that collision regardless of any
+`remote.portsAttributes.<port>.onAutoForward: ignore`
+setting (which is flaky on first window load and
+needs a reload to apply). The `.vscode/settings.json`
+ignore entries stay as belt-and-braces.
+
+**Chrome binds IPv4** when nothing else holds the
+port — confirmed by
+`ssh 172.17.0.1 "ss -tlnp 'sport = :9237'"` →
+`127.0.0.1:9237`. The SSH-L right-side therefore
+targets `127.0.0.1`, not `[::1]`. The IPv6 fallback
+warned about in sibling `website/AGENTS.md` is a
+contingent state, not chrome's default. Note
+`--remote-debugging-address` has been removed
+upstream (Chromium #41487252) so chrome's bind
+family cannot be steered with a flag — we shape the
+environment around it.
+
+Sibling repos use port `9234` (`awesome-apptly`),
+`9235` (`poupe-ui/poupe`), `9236` (`website`),
+`9237` (this repo); each has its own
+`.mcp.json` + `ssh-chrome.sh` pair so multiple
+projects can pair-drive in parallel without
+clashing.
+
+The CLI's "no browser spawning" rule still applies
+to CLI commands themselves (see *Headless runtime*
+below); the MCP pairing is an agent-side debug
+channel, not a CLI flow.
 
 ## obuild stubbing
 
