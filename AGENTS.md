@@ -150,7 +150,8 @@ demonstrates the API with a banner `notFound` and
 no routes. The CLI carries `whoami` (auth pipeline)
 plus the read-only inspection commands `zones list`,
 `zones get <zone>`, `hostnames list <zone>`,
-`fallback get <zone>`, and `bindings list <zone>`.
+`fallback get <zone>`, `bindings list <zone>`, and
+`dns <name>`.
 
 `zones get` is the aggregated diagnostic view —
 after resolving the zone it fetches custom
@@ -179,6 +180,16 @@ catches Cloudflare-for-SaaS fallback traffic).
 Rows are tagged by kind (`route` / `domain`) so
 `grep`/`jq` can filter cleanly. The aggregator's
 `bindings:` section follows the same layout.
+
+`dns <name>` is an anonymous DoH probe against
+Cloudflare's 1.1.1.1 public resolver (no auth, no
+`Client`). It exists so the CLI can sanity-check
+what CF SaaS would resolve during fallback
+forwarding without depending on `dig`/`host` being
+installed on the host. Rows are
+`<name> <TTL> <type> <data>`; `--json` switches to
+NDJSON of the CF DoH JSON envelope's `Answer`
+entries.
 
 `--json` currently echoes the full CF SDK envelope
 for every resource — large, but easy to project

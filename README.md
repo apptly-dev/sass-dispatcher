@@ -58,10 +58,10 @@ those operations skip with a warning when it's unset.
 ## Scripting the CLI
 
 Scriptable commands like `zones list`,
-`hostnames list <zone>`, `fallback get <zone>`, and
-`bindings list <zone>` write data rows directly to
-stdout, one row per line; warnings and errors go to
-stderr. The default row shape is space-separated
+`hostnames list <zone>`, `fallback get <zone>`,
+`bindings list <zone>`, and `dns <name>` write data
+rows directly to stdout, one row per line; warnings
+and errors go to stderr. The default row shape is space-separated
 fields, safe for piping into `awk`, `xargs`, `cut`,
 etc. Pass `--json` to switch the data stream to one
 JSON envelope per record (NDJSON for `list`, a single
@@ -91,6 +91,15 @@ Custom Domains is account-scoped, so
 `CLOUDFLARE_ACCOUNT_ID` must be set or the domains
 half is skipped with a stderr warning.
 
+`dns <name>` queries Cloudflare's public DoH
+endpoint (`cloudflare-dns.com/dns-query`)
+anonymously — no `CLOUDFLARE_API_TOKEN` needed.
+`--type` selects the record type (default `A`); rows
+are `<name> <TTL> <type> <data>`. Useful for
+sanity-checking what CF SaaS would resolve during
+fallback forwarding when `dig`/`host` aren't on the
+machine.
+
 When invoked as `pnpm cli`, pnpm itself prints a three-line
 script banner (the `> @apptly/...` headers and a blank
 line) to stdout before forwarding the command output. To
@@ -101,6 +110,7 @@ pnpm --silent cli zones list | wc -l   # exact zone count
 pnpm --silent cli hostnames list apptly.me --json | jq -r '.hostname'
 pnpm --silent cli zones get apptly.me --json | jq -r '.hostnames[].hostname'
 pnpm --silent cli bindings list apptly.me --json | jq -r 'select(.kind=="domain").hostname'
+pnpm --silent cli dns apptly.me --type AAAA
 ```
 
 Calling the built binary directly
