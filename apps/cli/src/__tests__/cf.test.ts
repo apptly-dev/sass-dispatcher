@@ -186,6 +186,52 @@ describe('cf Client', () => {
     expect(fallbackOriginGetMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
   });
 
+  it('returns the paired fallback and hostnames from fallbackWithHostnames()', async () => {
+    const fallback = { origin: 'fallback.example.com', status: 'active' };
+    const hostnames = [
+      { id: 'ch-1', hostname: 'taistamp.org', status: 'active' },
+    ];
+    fallbackOriginGetMock.mockResolvedValueOnce(fallback);
+    customHostnamesListMock.mockReturnValueOnce(asyncIterableFromArray(hostnames));
+
+    const result = await new Client(makeAuth()).fallbackWithHostnames('zone-1');
+
+    expect(result).toEqual({ fallback, hostnames });
+    expect(fallbackOriginGetMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
+    expect(customHostnamesListMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
+  });
+
+  it('swallows a 404 from the fallback endpoint into fallback: undefined', async () => {
+    const hostnames = [
+      { id: 'ch-1', hostname: 'taistamp.org', status: 'active' },
+    ];
+    fallbackOriginGetMock.mockRejectedValueOnce(new APIError(
+      404,
+      { errors: [{ code: 1551, message: 'No fallback origin configured' }] },
+      'No fallback origin configured',
+      {},
+    ));
+    customHostnamesListMock.mockReturnValueOnce(asyncIterableFromArray(hostnames));
+
+    const result = await new Client(makeAuth()).fallbackWithHostnames('zone-1');
+
+    expect(result).toEqual({ fallback: undefined, hostnames });
+  });
+
+  it('lets a non-404 fallback error bubble out of fallbackWithHostnames()', async () => {
+    const failure = new APIError(
+      403,
+      { errors: [{ code: 9109, message: 'Unauthorized to access fallback origin' }] },
+      'Unauthorized to access fallback origin',
+      {},
+    );
+    fallbackOriginGetMock.mockRejectedValueOnce(failure);
+    customHostnamesListMock.mockReturnValueOnce(asyncIterableFromArray([]));
+
+    await expect(new Client(makeAuth()).fallbackWithHostnames('zone-1'))
+      .rejects.toBe(failure);
+  });
+
   it('drains the paginated iterator from workersRoutesList()', async () => {
     const routes = [
       { id: 'route-1', pattern: 'apptly.me/*', script: 'dispatcher' },

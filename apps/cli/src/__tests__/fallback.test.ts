@@ -1,10 +1,17 @@
+// cspell:words sunxi taistamp
 import { runCommand } from 'citty';
 import { consola } from 'consola';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APIError, Client } from '../cf';
 import fallback from '../commands/fallback';
-import { type Auth, type FallbackOrigin, type Zone } from '../types';
+import {
+  type Auth,
+  type CustomHostname,
+  type FallbackBundle,
+  type FallbackOrigin,
+  type Zone,
+} from '../types';
 
 interface Captured {
   error: string[]
@@ -38,6 +45,24 @@ function makeFallback(overrides: Partial<FallbackOrigin> = {}): FallbackOrigin {
   } as FallbackOrigin;
 }
 
+function makeHostname(overrides: Partial<CustomHostname> = {}): CustomHostname {
+  return {
+    id: 'ch-1',
+    hostname: 'taistamp.org',
+    status: 'active',
+    ssl: { status: 'active' },
+    ...overrides,
+  } as CustomHostname;
+}
+
+function makeBundle(overrides: Partial<FallbackBundle> = {}): FallbackBundle {
+  return {
+    fallback: makeFallback(),
+    hostnames: [],
+    ...overrides,
+  };
+}
+
 function makeAuth(overrides: Partial<Auth> = {}): Auth {
   return {
     token: 'demo-1234567890-test',
@@ -49,7 +74,7 @@ function makeAuth(overrides: Partial<Auth> = {}): Auth {
 describe('cli fallback', () => {
   let captured: Captured;
   let savedExitCode: typeof process.exitCode;
-  let fallbackOriginGetSpy: ReturnType<typeof vi.spyOn>;
+  let fallbackWithHostnamesSpy: ReturnType<typeof vi.spyOn>;
   let zonesGetSpy: ReturnType<typeof vi.spyOn>;
   let loadAuthSpy: ReturnType<typeof vi.spyOn>;
   let stdoutSpy: ReturnType<typeof vi.spyOn>;
@@ -79,7 +104,7 @@ describe('cli fallback', () => {
         return true;
       },
     );
-    fallbackOriginGetSpy = vi.spyOn(Client.prototype, 'fallbackOriginGet');
+    fallbackWithHostnamesSpy = vi.spyOn(Client.prototype, 'fallbackWithHostnames');
     zonesGetSpy = vi.spyOn(Client.prototype, 'zonesGet');
     zonesGetSpy.mockResolvedValue(makeZone());
     loadAuthSpy = vi.spyOn(await import('../auth'), 'loadAuth');
@@ -90,42 +115,65 @@ describe('cli fallback', () => {
     consola.restoreAll();
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
-    fallbackOriginGetSpy.mockRestore();
+    fallbackWithHostnamesSpy.mockRestore();
     zonesGetSpy.mockRestore();
     loadAuthSpy.mockRestore();
     process.exitCode = savedExitCode;
   });
 
-  it('get writes the fallback origin and status to stdout', async () => {
-    fallbackOriginGetSpy.mockResolvedValue(makeFallback());
-
-    await runCommand(fallback, { rawArgs: ['get', 'apptly.me'] });
-
-    expect(zonesGetSpy).toHaveBeenCalledWith('apptly.me');
-    expect(fallbackOriginGetSpy).toHaveBeenCalledWith('zone-1');
-    expect(captured.stdout.join('')).toBe('fallback.example.com active\n');
-    expect(captured.error).toHaveLength(0);
-    expect(process.exitCode).toBe(savedExitCode);
-  });
-
-  it('get emits the full JSON envelope when --json is set', async () => {
-    const envelope = makeFallback({ created_at: '2026-05-01T00:00:00Z' });
-    fallbackOriginGetSpy.mockResolvedValue(envelope);
-
-    await runCommand(fallback, { rawArgs: ['get', 'apptly.me', '--json'] });
-
-    expect(captured.stdout.join('')).toBe(`${JSON.stringify(envelope)}\n`);
-  });
-
-  it('get renders "unset" when no origin is configured', async () => {
-    fallbackOriginGetSpy.mockResolvedValue(makeFallback({
-      origin: undefined,
-      status: undefined,
+  it('get writes the fallback line and verbose hostnames to stdout', async () => {
+    fallbackWithHostnamesSpy.mockResolvedValue(makeBundle({
+      hostnames: [
+        makeHostname({ custom_origin_server: 'minima.linux-sunxi.org' }),
+        makeHostname({
+          id: 'ch-2',
+          hostname: 'example.com',
+          status: 'pending',
+          ssl: { status: 'pending_validation' },
+        }),
+      ],
     }));
 
     await runCommand(fallback, { rawArgs: ['get', 'apptly.me'] });
 
-    expect(captured.stdout.join('')).toBe('unset unknown\n');
+    expect(zonesGetSpy).toHaveBeenCalledWith('apptly.me');
+    expect(fallbackWithHostnamesSpy).toHaveBeenCalledWith('zone-1');
+    expect(captured.stdout.join('')).toBe(
+      'hostnames:\n' +
+      '  ch-1 taistamp.org\n' +
+      '    status: active\n' +
+      '    ssl: active\n' +
+      '    origin: minima.linux-sunxi.org\n' +
+      '    errors: none\n' +
+      '  ch-2 example.com\n' +
+      '    status: pending\n' +
+      '    ssl: pending_validation\n' +
+      '    origin: → fallback\n' +
+      '    errors: none\n' +
+      'fallback: fallback.example.com active\n',
+    );
+    expect(captured.error).toHaveLength(0);
+    expect(process.exitCode).toBe(savedExitCode);
+  });
+
+  it('get emits the composite bundle envelope when --json is set', async () => {
+    const bundle = makeBundle({ hostnames: [makeHostname()] });
+    fallbackWithHostnamesSpy.mockResolvedValue(bundle);
+
+    await runCommand(fallback, { rawArgs: ['get', 'apptly.me', '--json'] });
+
+    expect(captured.stdout.join('')).toBe(`${JSON.stringify(bundle)}\n`);
+  });
+
+  it('get renders "fallback: unset" and "hostnames: none" on an empty zone', async () => {
+    fallbackWithHostnamesSpy.mockResolvedValue({ fallback: undefined, hostnames: [] });
+
+    await runCommand(fallback, { rawArgs: ['get', 'apptly.me'] });
+
+    expect(captured.stdout.join('')).toBe(
+      'hostnames: none\n' +
+      'fallback: unset\n',
+    );
   });
 
   it('get exits non-zero when the zone name does not resolve', async () => {
@@ -136,22 +184,22 @@ describe('cli fallback', () => {
     expect(captured.stdout).toHaveLength(0);
     expect(captured.error.join('\n')).toContain('no zone matching absent.example');
     expect(process.exitCode).toBe(1);
-    expect(fallbackOriginGetSpy).not.toHaveBeenCalled();
+    expect(fallbackWithHostnamesSpy).not.toHaveBeenCalled();
   });
 
-  it('get reports a clean APIError 404 when no fallback is configured', async () => {
-    fallbackOriginGetSpy.mockRejectedValue(new APIError(
-      404,
-      { errors: [{ code: 1551, message: 'No fallback origin configured' }] },
-      'No fallback origin configured',
+  it('get reports a clean APIError and exits non-zero', async () => {
+    fallbackWithHostnamesSpy.mockRejectedValue(new APIError(
+      403,
+      { errors: [{ code: 9109, message: 'Unauthorized to access custom hostnames' }] },
+      'Unauthorized to access custom hostnames',
       {},
     ));
 
     await runCommand(fallback, { rawArgs: ['get', 'apptly.me'] });
 
     const errorLine = captured.error.join('\n');
-    expect(errorLine).toContain('[HTTP 404]');
-    expect(errorLine).toContain('No fallback origin configured');
+    expect(errorLine).toContain('[HTTP 403]');
+    expect(errorLine).toContain('Unauthorized to access custom hostnames');
     expect(captured.stdout).toHaveLength(0);
     expect(process.exitCode).toBe(1);
   });

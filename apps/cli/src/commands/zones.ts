@@ -2,12 +2,11 @@ import { defineCommand } from 'citty';
 import { consola } from 'consola';
 
 import { AuthError } from '../auth';
-import { APIError } from '../cf';
 import { fatal } from '../exit';
+import { formatFallbackBundle } from '../format';
 import { withClient } from '../lifecycle';
 import {
-  type CustomHostname,
-  type FallbackOrigin,
+  type FallbackBundle,
   type WorkersDomain,
   type WorkersRoute,
   type Zone,
@@ -15,18 +14,6 @@ import {
 
 function formatZone(zone: Zone): string {
   return `${zone.id} ${zone.name} ${zone.status ?? 'unknown'}`;
-}
-
-function formatHostname(hostname: CustomHostname): string {
-  const status = hostname.status ?? 'unknown';
-  const sslStatus = hostname.ssl?.status ?? 'unknown';
-  return `${hostname.id} ${hostname.hostname} ${status} ${sslStatus}`;
-}
-
-function formatFallback(fallback: FallbackOrigin): string {
-  const origin = fallback.origin ?? 'unset';
-  const status = fallback.status ?? 'unknown';
-  return `${origin} ${status}`;
 }
 
 function formatRoute(route: WorkersRoute): string {
@@ -52,13 +39,20 @@ interface ZoneBindings {
 
 interface ZoneDetail {
   bindings: ZoneBindings
-  fallback: FallbackOrigin | undefined
-  hostnames: CustomHostname[]
+  bundle: FallbackBundle
   zone: Zone
 }
 
-function writeZoneDetail(detail: ZoneDetail, json: boolean): void {
-  if (json) {
+interface ZoneDetailWriteOptions {
+  hostnamesDetail: boolean
+  json: boolean
+}
+
+function writeZoneDetail(
+  detail: ZoneDetail,
+  options: ZoneDetailWriteOptions,
+): void {
+  if (options.json) {
     // Explicit field order (zone → hostnames → fallback →
     // bindings) reads from SaaS layer down to worker layer.
     // `JSON.stringify` drops keys with `undefined` values, so
@@ -66,8 +60,8 @@ function writeZoneDetail(detail: ZoneDetail, json: boolean): void {
     // shows up as the absence of those keys.
     const envelope = {
       zone: detail.zone,
-      hostnames: detail.hostnames,
-      fallback: detail.fallback,
+      hostnames: detail.bundle.hostnames,
+      fallback: detail.bundle.fallback,
       bindings: {
         routes: detail.bindings.routes,
         domains: detail.bindings.domains,
@@ -76,19 +70,13 @@ function writeZoneDetail(detail: ZoneDetail, json: boolean): void {
     process.stdout.write(`${JSON.stringify(envelope)}\n`);
     return;
   }
-  const { zone, hostnames, fallback, bindings } = detail;
+  const { zone, bundle, bindings } = detail;
   process.stdout.write(`zone: ${formatZone(zone)}\n`);
-  if (hostnames.length === 0) {
-    process.stdout.write('hostnames: none\n');
-  } else {
-    process.stdout.write('hostnames:\n');
-    for (const hostname of hostnames) {
-      process.stdout.write(`  ${formatHostname(hostname)}\n`);
-    }
+  for (const line of formatFallbackBundle(bundle, {
+    hostnamesDetail: options.hostnamesDetail,
+  })) {
+    process.stdout.write(`${line}\n`);
   }
-  process.stdout.write(
-    `fallback: ${fallback === undefined ? 'unset' : formatFallback(fallback)}\n`,
-  );
   process.stdout.write('bindings:\n');
   if (bindings.routes.length === 0) {
     process.stdout.write('  routes: none\n');
@@ -140,13 +128,18 @@ const list = defineCommand({
 const get = defineCommand({
   meta: {
     name: 'get',
-    description: 'Detailed view of a zone (metadata + hostnames + fallback)',
+    description: 'Detailed view of a zone (metadata + hostnames + fallback + bindings)',
   },
   args: {
     name: {
       type: 'positional',
       description: 'Zone name (e.g., apptly.me)',
       required: true,
+    },
+    hostnamesDetail: {
+      type: 'boolean',
+      description: 'Expand each hostname row to the verbose diagnostic block (origin, SSL, errors)',
+      default: false,
     },
     json: {
       type: 'boolean',
@@ -161,17 +154,8 @@ const get = defineCommand({
         fatal(`no zone matching ${args.name}`);
         return;
       }
-      const [hostnames, fallback, routes, domains] = await Promise.all([
-        client.customHostnamesList(zone.id),
-        client.fallbackOriginGet(zone.id).catch((error: unknown) => {
-          // CF returns 404 when no fallback is configured — that's
-          // a normal state for a fresh zone, so surface it as
-          // `unset` rather than failing the whole aggregated view.
-          if (error instanceof APIError && error.status === 404) {
-            return undefined;
-          }
-          throw error;
-        }),
+      const [bundle, routes, domains] = await Promise.all([
+        client.fallbackWithHostnames(zone.id),
         client.workersRoutesList(zone.id),
         client.workersDomainsList(zone.id).catch((error: unknown) => {
           // Account-scoped lookup: without an account id we
@@ -184,12 +168,14 @@ const get = defineCommand({
           throw error;
         }),
       ]);
-      writeZoneDetail({
-        zone,
-        hostnames,
-        fallback,
-        bindings: { routes, domains },
-      }, args.json);
+      writeZoneDetail(
+        {
+          zone,
+          bundle,
+          bindings: { routes, domains },
+        },
+        { hostnamesDetail: args.hostnamesDetail, json: args.json },
+      );
     });
   },
 });

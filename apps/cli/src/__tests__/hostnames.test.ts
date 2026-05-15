@@ -1,4 +1,4 @@
-// cspell:words taistamp
+// cspell:words sunxi taistamp
 import { runCommand } from 'citty';
 import { consola } from 'consola';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -99,7 +99,7 @@ describe('cli hostnames', () => {
     process.exitCode = savedExitCode;
   });
 
-  it('list writes one row per hostname to stdout', async () => {
+  it('list writes a verbose block per hostname to stdout', async () => {
     customHostnamesListSpy.mockResolvedValue([
       makeHostname(),
       makeHostname({
@@ -115,11 +115,49 @@ describe('cli hostnames', () => {
     expect(zonesGetSpy).toHaveBeenCalledWith('apptly.me');
     expect(customHostnamesListSpy).toHaveBeenCalledWith('zone-1');
     expect(captured.stdout.join('')).toBe(
-      'ch-1 taistamp.org active active\n' +
-      'ch-2 example.com pending pending_validation\n',
+      'ch-1 taistamp.org\n' +
+      '  status: active\n' +
+      '  ssl: active\n' +
+      '  origin: → fallback\n' +
+      '  errors: none\n' +
+      'ch-2 example.com\n' +
+      '  status: pending\n' +
+      '  ssl: pending_validation\n' +
+      '  origin: → fallback\n' +
+      '  errors: none\n',
     );
     expect(captured.error).toHaveLength(0);
     expect(process.exitCode).toBe(savedExitCode);
+  });
+
+  it('list surfaces custom_origin_server, sni, and verification_errors', async () => {
+    customHostnamesListSpy.mockResolvedValue([
+      makeHostname({
+        id: 'ch-3',
+        hostname: 'taistamp.org',
+        custom_origin_server: 'minima.linux-sunxi.org',
+        custom_origin_sni: ':request_host_header:',
+        verification_errors: ['waiting for DCV', 'no CAA record'],
+        ssl: {
+          status: 'pending_validation',
+          method: 'http',
+          certificate_authority: 'lets_encrypt',
+          validation_errors: [{ message: 'CAA record blocks Let\'s Encrypt' }],
+        },
+      }),
+    ]);
+
+    await runCommand(hostnames, { rawArgs: ['list', 'apptly.me'] });
+
+    expect(captured.stdout.join('')).toBe(
+      'ch-3 taistamp.org\n' +
+      '  status: active\n' +
+      '  ssl: pending_validation (method=http, ca=lets_encrypt)\n' +
+      '  origin: minima.linux-sunxi.org\n' +
+      '  sni: :request_host_header:\n' +
+      '  errors: waiting for DCV; no CAA record\n' +
+      '  ssl errors: CAA record blocks Let\'s Encrypt\n',
+    );
   });
 
   it('list emits NDJSON envelopes when --json is set', async () => {
@@ -134,14 +172,20 @@ describe('cli hostnames', () => {
     );
   });
 
-  it('list renders "unknown" when hostname status or ssl status is missing', async () => {
+  it('list renders "unknown" when hostname status or ssl is missing', async () => {
     customHostnamesListSpy.mockResolvedValue([
       makeHostname({ id: 'ch-x', status: undefined, ssl: undefined }),
     ]);
 
     await runCommand(hostnames, { rawArgs: ['list', 'apptly.me'] });
 
-    expect(captured.stdout.join('')).toBe('ch-x taistamp.org unknown unknown\n');
+    expect(captured.stdout.join('')).toBe(
+      'ch-x taistamp.org\n' +
+      '  status: unknown\n' +
+      '  ssl: unknown\n' +
+      '  origin: → fallback\n' +
+      '  errors: none\n',
+    );
   });
 
   it('list warns on empty result via consola without polluting stdout', async () => {

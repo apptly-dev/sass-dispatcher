@@ -9,6 +9,7 @@ import zones from '../commands/zones';
 import {
   type Auth,
   type CustomHostname,
+  type FallbackBundle,
   type FallbackOrigin,
   type WorkersDomain,
   type WorkersRoute,
@@ -79,6 +80,14 @@ function makeDomain(overrides: Partial<WorkersDomain> = {}): WorkersDomain {
   };
 }
 
+function makeBundle(overrides: Partial<FallbackBundle> = {}): FallbackBundle {
+  return {
+    fallback: makeFallback(),
+    hostnames: [],
+    ...overrides,
+  };
+}
+
 function makeAuth(overrides: Partial<Auth> = {}): Auth {
   return {
     token: 'demo-1234567890-test',
@@ -93,8 +102,7 @@ describe('cli zones', () => {
   let savedExitCode: typeof process.exitCode;
   let zonesListSpy: ReturnType<typeof vi.spyOn>;
   let zonesGetSpy: ReturnType<typeof vi.spyOn>;
-  let customHostnamesListSpy: ReturnType<typeof vi.spyOn>;
-  let fallbackOriginGetSpy: ReturnType<typeof vi.spyOn>;
+  let fallbackWithHostnamesSpy: ReturnType<typeof vi.spyOn>;
   let workersRoutesListSpy: ReturnType<typeof vi.spyOn>;
   let workersDomainsListSpy: ReturnType<typeof vi.spyOn>;
   let loadAuthSpy: ReturnType<typeof vi.spyOn>;
@@ -127,10 +135,8 @@ describe('cli zones', () => {
     );
     zonesListSpy = vi.spyOn(Client.prototype, 'zonesList');
     zonesGetSpy = vi.spyOn(Client.prototype, 'zonesGet');
-    customHostnamesListSpy = vi.spyOn(Client.prototype, 'customHostnamesList');
-    customHostnamesListSpy.mockResolvedValue([]);
-    fallbackOriginGetSpy = vi.spyOn(Client.prototype, 'fallbackOriginGet');
-    fallbackOriginGetSpy.mockResolvedValue(makeFallback());
+    fallbackWithHostnamesSpy = vi.spyOn(Client.prototype, 'fallbackWithHostnames');
+    fallbackWithHostnamesSpy.mockResolvedValue(makeBundle());
     workersRoutesListSpy = vi.spyOn(Client.prototype, 'workersRoutesList');
     workersRoutesListSpy.mockResolvedValue([]);
     workersDomainsListSpy = vi.spyOn(Client.prototype, 'workersDomainsList');
@@ -145,8 +151,7 @@ describe('cli zones', () => {
     stderrSpy.mockRestore();
     zonesListSpy.mockRestore();
     zonesGetSpy.mockRestore();
-    customHostnamesListSpy.mockRestore();
-    fallbackOriginGetSpy.mockRestore();
+    fallbackWithHostnamesSpy.mockRestore();
     workersRoutesListSpy.mockRestore();
     workersDomainsListSpy.mockRestore();
     loadAuthSpy.mockRestore();
@@ -184,24 +189,23 @@ describe('cli zones', () => {
 
   it('get writes the aggregated zone detail to stdout', async () => {
     zonesGetSpy.mockResolvedValue(makeZone());
-    customHostnamesListSpy.mockResolvedValue([
-      makeHostname(),
-      makeHostname({
-        id: 'ch-2',
-        hostname: 'sunxi.apptly.me',
-        status: 'pending',
-        ssl: { status: 'pending_validation' },
-      }),
-    ]);
-    fallbackOriginGetSpy.mockResolvedValue(makeFallback({
-      origin: 'apptly.me',
+    fallbackWithHostnamesSpy.mockResolvedValue(makeBundle({
+      fallback: makeFallback({ origin: 'apptly.me' }),
+      hostnames: [
+        makeHostname(),
+        makeHostname({
+          id: 'ch-2',
+          hostname: 'sunxi.apptly.me',
+          status: 'pending',
+          ssl: { status: 'pending_validation' },
+        }),
+      ],
     }));
 
     await runCommand(zones, { rawArgs: ['get', 'apptly.me'] });
 
     expect(zonesGetSpy).toHaveBeenCalledWith('apptly.me');
-    expect(customHostnamesListSpy).toHaveBeenCalledWith('zone-1');
-    expect(fallbackOriginGetSpy).toHaveBeenCalledWith('zone-1');
+    expect(fallbackWithHostnamesSpy).toHaveBeenCalledWith('zone-1');
     expect(workersRoutesListSpy).toHaveBeenCalledWith('zone-1');
     expect(workersDomainsListSpy).toHaveBeenCalledWith('zone-1');
     expect(captured.stdout.join('')).toBe(
@@ -218,15 +222,36 @@ describe('cli zones', () => {
     expect(captured.stderr).toHaveLength(0);
   });
 
-  it('get renders "none" for empty hostnames and "unset" when fallback is 404', async () => {
+  it('get expands hostnames into verbose blocks when --hostnames-detail is set', async () => {
     zonesGetSpy.mockResolvedValue(makeZone());
-    customHostnamesListSpy.mockResolvedValue([]);
-    fallbackOriginGetSpy.mockRejectedValue(new APIError(
-      404,
-      { errors: [{ code: 1551, message: 'No fallback origin configured' }] },
-      'No fallback origin configured',
-      {},
-    ));
+    fallbackWithHostnamesSpy.mockResolvedValue(makeBundle({
+      hostnames: [
+        makeHostname({ custom_origin_server: 'minima.linux-sunxi.org' }),
+      ],
+    }));
+
+    await runCommand(zones, {
+      rawArgs: ['get', 'apptly.me', '--hostnames-detail'],
+    });
+
+    expect(captured.stdout.join('')).toBe(
+      'zone: zone-1 apptly.me active\n' +
+      'hostnames:\n' +
+      '  ch-1 taistamp.org\n' +
+      '    status: active\n' +
+      '    ssl: active\n' +
+      '    origin: minima.linux-sunxi.org\n' +
+      '    errors: none\n' +
+      'fallback: fallback.example.com active\n' +
+      'bindings:\n' +
+      '  routes: none\n' +
+      '  domains: none\n',
+    );
+  });
+
+  it('get renders "none" for empty hostnames and "unset" when fallback is undefined', async () => {
+    zonesGetSpy.mockResolvedValue(makeZone());
+    fallbackWithHostnamesSpy.mockResolvedValue({ fallback: undefined, hostnames: [] });
 
     await runCommand(zones, { rawArgs: ['get', 'apptly.me'] });
 
@@ -293,9 +318,9 @@ describe('cli zones', () => {
     expect(process.exitCode).toBe(savedExitCode);
   });
 
-  it('get bubbles a non-404 fallback error and exits non-zero', async () => {
+  it('get bubbles a SaaS-routing error and exits non-zero', async () => {
     zonesGetSpy.mockResolvedValue(makeZone());
-    fallbackOriginGetSpy.mockRejectedValue(new APIError(
+    fallbackWithHostnamesSpy.mockRejectedValue(new APIError(
       403,
       { errors: [{ code: 9109, message: 'Unauthorized to access fallback origin' }] },
       'Unauthorized to access fallback origin',
@@ -318,8 +343,7 @@ describe('cli zones', () => {
     expect(captured.stdout).toHaveLength(0);
     expect(captured.error.join('\n')).toContain('no zone matching absent.example');
     expect(process.exitCode).toBe(1);
-    expect(customHostnamesListSpy).not.toHaveBeenCalled();
-    expect(fallbackOriginGetSpy).not.toHaveBeenCalled();
+    expect(fallbackWithHostnamesSpy).not.toHaveBeenCalled();
     expect(workersRoutesListSpy).not.toHaveBeenCalled();
     expect(workersDomainsListSpy).not.toHaveBeenCalled();
   });
@@ -388,8 +412,7 @@ describe('cli zones', () => {
     const route = makeRoute();
     const domain = makeDomain();
     zonesGetSpy.mockResolvedValue(zone);
-    customHostnamesListSpy.mockResolvedValue([hostname]);
-    fallbackOriginGetSpy.mockResolvedValue(fallback);
+    fallbackWithHostnamesSpy.mockResolvedValue({ fallback, hostnames: [hostname] });
     workersRoutesListSpy.mockResolvedValue([route]);
     workersDomainsListSpy.mockResolvedValue([domain]);
 
@@ -408,13 +431,7 @@ describe('cli zones', () => {
   it('get omits the fallback and domains keys in the JSON envelope when neither is available', async () => {
     loadAuthSpy.mockResolvedValue(makeAuth({ accountID: undefined }));
     zonesGetSpy.mockResolvedValue(makeZone());
-    customHostnamesListSpy.mockResolvedValue([]);
-    fallbackOriginGetSpy.mockRejectedValue(new APIError(
-      404,
-      { errors: [{ code: 1551, message: 'No fallback origin configured' }] },
-      'No fallback origin configured',
-      {},
-    ));
+    fallbackWithHostnamesSpy.mockResolvedValue({ fallback: undefined, hostnames: [] });
     workersDomainsListSpy.mockRejectedValue(new AuthError(
       'no-account',
       'CLOUDFLARE_ACCOUNT_ID not set — Worker Custom Domains needs an account id',

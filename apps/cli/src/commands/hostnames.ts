@@ -2,18 +2,18 @@ import { defineCommand } from 'citty';
 import { consola } from 'consola';
 
 import { fatal } from '../exit';
+import { formatHostnameDetail } from '../format';
 import { withClient } from '../lifecycle';
 import { type CustomHostname } from '../types';
 
-function formatHostname(hostname: CustomHostname): string {
-  const status = hostname.status ?? 'unknown';
-  const sslStatus = hostname.ssl?.status ?? 'unknown';
-  return `${hostname.id} ${hostname.hostname} ${status} ${sslStatus}`;
-}
-
 function writeHostnameRow(hostname: CustomHostname, json: boolean): void {
-  const line = json ? JSON.stringify(hostname) : formatHostname(hostname);
-  process.stdout.write(`${line}\n`);
+  if (json) {
+    process.stdout.write(`${JSON.stringify(hostname)}\n`);
+    return;
+  }
+  for (const line of formatHostnameDetail(hostname)) {
+    process.stdout.write(`${line}\n`);
+  }
 }
 
 const list = defineCommand({

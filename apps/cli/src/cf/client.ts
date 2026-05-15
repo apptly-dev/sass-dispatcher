@@ -4,6 +4,7 @@ import { AuthError } from '../auth';
 import {
   type Auth,
   type CustomHostname,
+  type FallbackBundle,
   type FallbackOrigin,
   type TokenVerifyResponse,
   type UserGetResponse,
@@ -12,6 +13,7 @@ import {
   type Zone,
 } from '../types';
 import * as customHostnames from './custom-hostnames';
+import * as fallbackBundle from './fallback-bundle';
 import * as fallbackOrigin from './fallback-origin';
 import * as workersDomains from './workers-domains';
 import * as workersRoutes from './workers-routes';
@@ -71,6 +73,16 @@ export class Client {
 
   fallbackOriginGet(zoneID: string): Promise<FallbackOrigin> {
     return fallbackOrigin.get(this.#raw, zoneID);
+  }
+
+  /**
+   * SaaS-routing snapshot for a zone — the fallback origin
+   * (or `undefined` when CF returns 404) paired with every
+   * custom hostname. One round-trip fan-out; see
+   * {@link fallbackBundle.get} for the 404-swallow rationale.
+   */
+  fallbackWithHostnames(zoneID: string): Promise<FallbackBundle> {
+    return fallbackBundle.get(this.#raw, zoneID);
   }
 
   workersRoutesList(zoneID: string): Promise<WorkersRoute[]> {
