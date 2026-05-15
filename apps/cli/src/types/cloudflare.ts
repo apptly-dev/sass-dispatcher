@@ -12,3 +12,5 @@ export type UserGetResponse = Cloudflare.User.UserGetResponse;
 export type Zone = Cloudflare.Zones.Zone;
 export type CustomHostname = Cloudflare.CustomHostnames.CustomHostnameListResponse;
 export type FallbackOrigin = Cloudflare.CustomHostnames.FallbackOriginGetResponse;
+export type WorkersRoute = Cloudflare.Workers.RouteListResponse;
+export type WorkersDomain = Cloudflare.Workers.DomainListResponse;

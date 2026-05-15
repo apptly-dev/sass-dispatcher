@@ -1,6 +1,7 @@
 // cspell:words darvaza taistamp
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthError } from '../auth';
 import { APIError, Client } from '../cf';
 import { type Auth } from '../types';
 
@@ -10,6 +11,8 @@ const {
   sdkConstructorSpy,
   userGetMock,
   verifyMock,
+  workersDomainsListMock,
+  workersRoutesListMock,
   zonesListMock,
 } = vi.hoisted(() => ({
   customHostnamesListMock: vi.fn(),
@@ -17,6 +20,8 @@ const {
   sdkConstructorSpy: vi.fn(),
   userGetMock: vi.fn(),
   verifyMock: vi.fn(),
+  workersDomainsListMock: vi.fn(),
+  workersRoutesListMock: vi.fn(),
   zonesListMock: vi.fn(),
 }));
 
@@ -29,6 +34,11 @@ vi.mock('cloudflare', async () => {
     };
 
     user: { get: typeof userGetMock; tokens: { verify: typeof verifyMock } };
+    workers: {
+      domains: { list: typeof workersDomainsListMock }
+      routes: { list: typeof workersRoutesListMock }
+    };
+
     zones: { list: typeof zonesListMock };
     constructor(options: { apiToken?: string } = {}) {
       sdkConstructorSpy(options);
@@ -38,13 +48,17 @@ vi.mock('cloudflare', async () => {
         list: customHostnamesListMock,
         fallbackOrigin: { get: fallbackOriginGetMock },
       };
+      this.workers = {
+        routes: { list: workersRoutesListMock },
+        domains: { list: workersDomainsListMock },
+      };
     }
   }
   return { ...actual, default: FakeCloudflare };
 });
 
-function makeAuth(token: string = 'demo-1234567890-test'): Auth {
-  return { token, source: 'env' };
+function makeAuth(token: string = 'demo-1234567890-test', accountID?: string): Auth {
+  return { token, source: 'env', accountID };
 }
 
 function asyncIterableFromArray<T>(items: readonly T[]): AsyncIterable<T> {
@@ -63,6 +77,8 @@ describe('cf Client', () => {
     zonesListMock.mockReset();
     customHostnamesListMock.mockReset();
     fallbackOriginGetMock.mockReset();
+    workersRoutesListMock.mockReset();
+    workersDomainsListMock.mockReset();
   });
 
   it('constructs the SDK with the auth token and no retries', () => {
@@ -168,5 +184,54 @@ describe('cf Client', () => {
 
     expect(result).toBe(expected);
     expect(fallbackOriginGetMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
+  });
+
+  it('drains the paginated iterator from workersRoutesList()', async () => {
+    const routes = [
+      { id: 'route-1', pattern: 'apptly.me/*', script: 'dispatcher' },
+      { id: 'route-2', pattern: '*.apptly.me/*' },
+    ];
+    workersRoutesListMock.mockReturnValueOnce(asyncIterableFromArray(routes));
+
+    const result = await new Client(makeAuth()).workersRoutesList('zone-1');
+
+    expect(result).toEqual(routes);
+    expect(workersRoutesListMock).toHaveBeenCalledWith({ zone_id: 'zone-1' });
+  });
+
+  it('passes account_id and zone_id through to workersDomainsList()', async () => {
+    const domains = [
+      {
+        id: 'dom-1',
+        cert_id: 'cert-1',
+        environment: 'production',
+        hostname: 'apptly.me',
+        service: 'dispatcher',
+        zone_id: 'zone-1',
+        zone_name: 'apptly.me',
+      },
+    ];
+    workersDomainsListMock.mockReturnValueOnce(asyncIterableFromArray(domains));
+
+    const result = await new Client(
+      makeAuth('demo-1234567890-test', 'acct-9'),
+    ).workersDomainsList('zone-1');
+
+    expect(result).toEqual(domains);
+    expect(workersDomainsListMock).toHaveBeenCalledWith({
+      account_id: 'acct-9',
+      zone_id: 'zone-1',
+    });
+  });
+
+  it('rejects workersDomainsList() with AuthError(no-account) when account_id is unset', async () => {
+    const promise = new Client(makeAuth()).workersDomainsList('zone-1');
+
+    await expect(promise).rejects.toBeInstanceOf(AuthError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'no-account',
+      message: expect.stringContaining('CLOUDFLARE_ACCOUNT_ID'),
+    });
+    expect(workersDomainsListMock).not.toHaveBeenCalled();
   });
 });

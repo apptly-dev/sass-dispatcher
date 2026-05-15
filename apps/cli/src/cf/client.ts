@@ -1,15 +1,20 @@
 import Cloudflare from 'cloudflare';
 
+import { AuthError } from '../auth';
 import {
   type Auth,
   type CustomHostname,
   type FallbackOrigin,
   type TokenVerifyResponse,
   type UserGetResponse,
+  type WorkersDomain,
+  type WorkersRoute,
   type Zone,
 } from '../types';
 import * as customHostnames from './custom-hostnames';
 import * as fallbackOrigin from './fallback-origin';
+import * as workersDomains from './workers-domains';
+import * as workersRoutes from './workers-routes';
 import * as zones from './zones';
 
 /**
@@ -33,6 +38,7 @@ import * as zones from './zones';
  * `userGet` (`GET /user`) for those.
  */
 export class Client {
+  readonly #accountID: string | undefined;
   readonly #raw: Cloudflare;
 
   constructor(auth: Auth) {
@@ -40,6 +46,7 @@ export class Client {
       apiToken: auth.token,
       maxRetries: 0,
     });
+    this.#accountID = auth.accountID;
   }
 
   tokensVerify(): Promise<TokenVerifyResponse> {
@@ -58,12 +65,34 @@ export class Client {
     return zones.get(this.#raw, name);
   }
 
-  customHostnamesList(zoneId: string): Promise<CustomHostname[]> {
-    return customHostnames.list(this.#raw, zoneId);
+  customHostnamesList(zoneID: string): Promise<CustomHostname[]> {
+    return customHostnames.list(this.#raw, zoneID);
   }
 
-  fallbackOriginGet(zoneId: string): Promise<FallbackOrigin> {
-    return fallbackOrigin.get(this.#raw, zoneId);
+  fallbackOriginGet(zoneID: string): Promise<FallbackOrigin> {
+    return fallbackOrigin.get(this.#raw, zoneID);
+  }
+
+  workersRoutesList(zoneID: string): Promise<WorkersRoute[]> {
+    return workersRoutes.list(this.#raw, zoneID);
+  }
+
+  /**
+   * Lists Worker Custom Domains for the credential's account
+   * filtered to one zone. Worker Custom Domains is
+   * account-scoped, so this rejects with
+   * `AuthError('no-account')` when no `accountID` is bound;
+   * auto-resolving the account is on the roadmap but not yet
+   * wired (see {@link loadAuth}).
+   */
+  async workersDomainsList(zoneID: string): Promise<WorkersDomain[]> {
+    if (this.#accountID === undefined) {
+      throw new AuthError(
+        'no-account',
+        'CLOUDFLARE_ACCOUNT_ID not set — Worker Custom Domains needs an account id',
+      );
+    }
+    return workersDomains.list(this.#raw, this.#accountID, zoneID);
   }
 }
 

@@ -10,6 +10,8 @@ import {
   type Auth,
   type CustomHostname,
   type FallbackOrigin,
+  type WorkersDomain,
+  type WorkersRoute,
   type Zone,
 } from '../types';
 
@@ -55,10 +57,33 @@ function makeFallback(overrides: Partial<FallbackOrigin> = {}): FallbackOrigin {
   } as FallbackOrigin;
 }
 
+function makeRoute(overrides: Partial<WorkersRoute> = {}): WorkersRoute {
+  return {
+    id: 'route-1',
+    pattern: 'apptly.me/*',
+    script: 'dispatcher',
+    ...overrides,
+  };
+}
+
+function makeDomain(overrides: Partial<WorkersDomain> = {}): WorkersDomain {
+  return {
+    id: 'dom-1',
+    cert_id: 'cert-1',
+    environment: 'production',
+    hostname: 'apptly.me',
+    service: 'dispatcher',
+    zone_id: 'zone-1',
+    zone_name: 'apptly.me',
+    ...overrides,
+  };
+}
+
 function makeAuth(overrides: Partial<Auth> = {}): Auth {
   return {
     token: 'demo-1234567890-test',
     source: 'env',
+    accountID: 'acct-9',
     ...overrides,
   };
 }
@@ -70,6 +95,8 @@ describe('cli zones', () => {
   let zonesGetSpy: ReturnType<typeof vi.spyOn>;
   let customHostnamesListSpy: ReturnType<typeof vi.spyOn>;
   let fallbackOriginGetSpy: ReturnType<typeof vi.spyOn>;
+  let workersRoutesListSpy: ReturnType<typeof vi.spyOn>;
+  let workersDomainsListSpy: ReturnType<typeof vi.spyOn>;
   let loadAuthSpy: ReturnType<typeof vi.spyOn>;
   let stdoutSpy: ReturnType<typeof vi.spyOn>;
   let stderrSpy: ReturnType<typeof vi.spyOn>;
@@ -104,6 +131,10 @@ describe('cli zones', () => {
     customHostnamesListSpy.mockResolvedValue([]);
     fallbackOriginGetSpy = vi.spyOn(Client.prototype, 'fallbackOriginGet');
     fallbackOriginGetSpy.mockResolvedValue(makeFallback());
+    workersRoutesListSpy = vi.spyOn(Client.prototype, 'workersRoutesList');
+    workersRoutesListSpy.mockResolvedValue([]);
+    workersDomainsListSpy = vi.spyOn(Client.prototype, 'workersDomainsList');
+    workersDomainsListSpy.mockResolvedValue([]);
     loadAuthSpy = vi.spyOn(await import('../auth'), 'loadAuth');
     loadAuthSpy.mockResolvedValue(makeAuth());
   });
@@ -116,6 +147,8 @@ describe('cli zones', () => {
     zonesGetSpy.mockRestore();
     customHostnamesListSpy.mockRestore();
     fallbackOriginGetSpy.mockRestore();
+    workersRoutesListSpy.mockRestore();
+    workersDomainsListSpy.mockRestore();
     loadAuthSpy.mockRestore();
     process.exitCode = savedExitCode;
   });
@@ -169,12 +202,17 @@ describe('cli zones', () => {
     expect(zonesGetSpy).toHaveBeenCalledWith('apptly.me');
     expect(customHostnamesListSpy).toHaveBeenCalledWith('zone-1');
     expect(fallbackOriginGetSpy).toHaveBeenCalledWith('zone-1');
+    expect(workersRoutesListSpy).toHaveBeenCalledWith('zone-1');
+    expect(workersDomainsListSpy).toHaveBeenCalledWith('zone-1');
     expect(captured.stdout.join('')).toBe(
       'zone: zone-1 apptly.me active\n' +
       'hostnames:\n' +
       '  ch-1 taistamp.org active active\n' +
       '  ch-2 sunxi.apptly.me pending pending_validation\n' +
-      'fallback: apptly.me active\n',
+      'fallback: apptly.me active\n' +
+      'bindings:\n' +
+      '  routes: none\n' +
+      '  domains: none\n',
     );
     expect(captured.error).toHaveLength(0);
     expect(captured.stderr).toHaveLength(0);
@@ -195,9 +233,63 @@ describe('cli zones', () => {
     expect(captured.stdout.join('')).toBe(
       'zone: zone-1 apptly.me active\n' +
       'hostnames: none\n' +
-      'fallback: unset\n',
+      'fallback: unset\n' +
+      'bindings:\n' +
+      '  routes: none\n' +
+      '  domains: none\n',
     );
     expect(captured.error).toHaveLength(0);
+    expect(process.exitCode).toBe(savedExitCode);
+  });
+
+  it('get renders the bindings section with routes and domains', async () => {
+    zonesGetSpy.mockResolvedValue(makeZone());
+    workersRoutesListSpy.mockResolvedValue([
+      makeRoute(),
+      makeRoute({ id: 'route-2', pattern: '*.apptly.me/*', script: undefined }),
+    ]);
+    workersDomainsListSpy.mockResolvedValue([
+      makeDomain(),
+      makeDomain({ id: 'dom-2', hostname: 'taistamp.org', service: 'tenant-worker' }),
+    ]);
+
+    await runCommand(zones, { rawArgs: ['get', 'apptly.me'] });
+
+    expect(captured.stdout.join('')).toBe(
+      'zone: zone-1 apptly.me active\n' +
+      'hostnames: none\n' +
+      'fallback: fallback.example.com active\n' +
+      'bindings:\n' +
+      '  routes:\n' +
+      '    route-1 apptly.me/* dispatcher\n' +
+      '    route-2 *.apptly.me/* unknown\n' +
+      '  domains:\n' +
+      '    dom-1 apptly.me dispatcher\n' +
+      '    dom-2 taistamp.org tenant-worker\n',
+    );
+    expect(captured.error).toHaveLength(0);
+  });
+
+  it('get renders domains as "unknown" when CLOUDFLARE_ACCOUNT_ID is unset', async () => {
+    loadAuthSpy.mockResolvedValue(makeAuth({ accountID: undefined }));
+    zonesGetSpy.mockResolvedValue(makeZone());
+    workersRoutesListSpy.mockResolvedValue([makeRoute()]);
+    workersDomainsListSpy.mockRejectedValue(new AuthError(
+      'no-account',
+      'CLOUDFLARE_ACCOUNT_ID not set — Worker Custom Domains needs an account id',
+    ));
+
+    await runCommand(zones, { rawArgs: ['get', 'apptly.me'] });
+
+    expect(captured.stdout.join('')).toBe(
+      'zone: zone-1 apptly.me active\n' +
+      'hostnames: none\n' +
+      'fallback: fallback.example.com active\n' +
+      'bindings:\n' +
+      '  routes:\n' +
+      '    route-1 apptly.me/* dispatcher\n' +
+      '  domains: unknown (CLOUDFLARE_ACCOUNT_ID unset)\n',
+    );
     expect(process.exitCode).toBe(savedExitCode);
   });
 
@@ -228,6 +320,8 @@ describe('cli zones', () => {
     expect(process.exitCode).toBe(1);
     expect(customHostnamesListSpy).not.toHaveBeenCalled();
     expect(fallbackOriginGetSpy).not.toHaveBeenCalled();
+    expect(workersRoutesListSpy).not.toHaveBeenCalled();
+    expect(workersDomainsListSpy).not.toHaveBeenCalled();
   });
 
   it('list reports a clean APIError and exits non-zero without writing rows', async () => {
@@ -291,18 +385,28 @@ describe('cli zones', () => {
     const zone = makeZone();
     const hostname = makeHostname();
     const fallback = makeFallback({ origin: 'apptly.me' });
+    const route = makeRoute();
+    const domain = makeDomain();
     zonesGetSpy.mockResolvedValue(zone);
     customHostnamesListSpy.mockResolvedValue([hostname]);
     fallbackOriginGetSpy.mockResolvedValue(fallback);
+    workersRoutesListSpy.mockResolvedValue([route]);
+    workersDomainsListSpy.mockResolvedValue([domain]);
 
     await runCommand(zones, { rawArgs: ['get', 'apptly.me', '--json'] });
 
     expect(captured.stdout.join('')).toBe(
-      `${JSON.stringify({ zone, hostnames: [hostname], fallback })}\n`,
+      `${JSON.stringify({
+        zone,
+        hostnames: [hostname],
+        fallback,
+        bindings: { routes: [route], domains: [domain] },
+      })}\n`,
     );
   });
 
-  it('get omits the fallback key in the JSON envelope when no fallback is configured', async () => {
+  it('get omits the fallback and domains keys in the JSON envelope when neither is available', async () => {
+    loadAuthSpy.mockResolvedValue(makeAuth({ accountID: undefined }));
     zonesGetSpy.mockResolvedValue(makeZone());
     customHostnamesListSpy.mockResolvedValue([]);
     fallbackOriginGetSpy.mockRejectedValue(new APIError(
@@ -311,6 +415,10 @@ describe('cli zones', () => {
       'No fallback origin configured',
       {},
     ));
+    workersDomainsListSpy.mockRejectedValue(new AuthError(
+      'no-account',
+      'CLOUDFLARE_ACCOUNT_ID not set — Worker Custom Domains needs an account id',
+    ));
 
     await runCommand(zones, { rawArgs: ['get', 'apptly.me', '--json'] });
 
@@ -318,6 +426,7 @@ describe('cli zones', () => {
       `${JSON.stringify({
         zone: makeZone(),
         hostnames: [],
+        bindings: { routes: [] },
       })}\n`,
     );
   });

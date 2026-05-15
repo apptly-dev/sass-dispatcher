@@ -1,12 +1,15 @@
 import { defineCommand } from 'citty';
 import { consola } from 'consola';
 
+import { AuthError } from '../auth';
 import { APIError } from '../cf';
 import { fatal } from '../exit';
 import { withClient } from '../lifecycle';
 import {
   type CustomHostname,
   type FallbackOrigin,
+  type WorkersDomain,
+  type WorkersRoute,
   type Zone,
 } from '../types';
 
@@ -26,12 +29,29 @@ function formatFallback(fallback: FallbackOrigin): string {
   return `${origin} ${status}`;
 }
 
+function formatRoute(route: WorkersRoute): string {
+  return `${route.id} ${route.pattern} ${route.script ?? 'unknown'}`;
+}
+
+function formatDomain(domain: WorkersDomain): string {
+  return `${domain.id} ${domain.hostname} ${domain.service}`;
+}
+
 function writeZoneRow(zone: Zone, json: boolean): void {
   const line = json ? JSON.stringify(zone) : formatZone(zone);
   process.stdout.write(`${line}\n`);
 }
 
+interface ZoneBindings {
+  // `domains` is `undefined` when CLOUDFLARE_ACCOUNT_ID is
+  // unset — the lookup couldn't run, distinct from "ran and
+  // found nothing" which is `[]`.
+  domains: undefined | WorkersDomain[]
+  routes: WorkersRoute[]
+}
+
 interface ZoneDetail {
+  bindings: ZoneBindings
   fallback: FallbackOrigin | undefined
   hostnames: CustomHostname[]
   zone: Zone
@@ -39,19 +59,24 @@ interface ZoneDetail {
 
 function writeZoneDetail(detail: ZoneDetail, json: boolean): void {
   if (json) {
-    // Explicit field order (zone → hostnames → fallback) reads
-    // logically. `JSON.stringify` drops keys with `undefined`
-    // values, so an unset fallback shows up as the absence of
-    // the `fallback` key — matching `FallbackOrigin | undefined`.
+    // Explicit field order (zone → hostnames → fallback →
+    // bindings) reads from SaaS layer down to worker layer.
+    // `JSON.stringify` drops keys with `undefined` values, so
+    // an unset fallback or a domains list we couldn't query
+    // shows up as the absence of those keys.
     const envelope = {
       zone: detail.zone,
       hostnames: detail.hostnames,
       fallback: detail.fallback,
+      bindings: {
+        routes: detail.bindings.routes,
+        domains: detail.bindings.domains,
+      },
     };
     process.stdout.write(`${JSON.stringify(envelope)}\n`);
     return;
   }
-  const { zone, hostnames, fallback } = detail;
+  const { zone, hostnames, fallback, bindings } = detail;
   process.stdout.write(`zone: ${formatZone(zone)}\n`);
   if (hostnames.length === 0) {
     process.stdout.write('hostnames: none\n');
@@ -64,6 +89,25 @@ function writeZoneDetail(detail: ZoneDetail, json: boolean): void {
   process.stdout.write(
     `fallback: ${fallback === undefined ? 'unset' : formatFallback(fallback)}\n`,
   );
+  process.stdout.write('bindings:\n');
+  if (bindings.routes.length === 0) {
+    process.stdout.write('  routes: none\n');
+  } else {
+    process.stdout.write('  routes:\n');
+    for (const route of bindings.routes) {
+      process.stdout.write(`    ${formatRoute(route)}\n`);
+    }
+  }
+  if (bindings.domains === undefined) {
+    process.stdout.write('  domains: unknown (CLOUDFLARE_ACCOUNT_ID unset)\n');
+  } else if (bindings.domains.length === 0) {
+    process.stdout.write('  domains: none\n');
+  } else {
+    process.stdout.write('  domains:\n');
+    for (const domain of bindings.domains) {
+      process.stdout.write(`    ${formatDomain(domain)}\n`);
+    }
+  }
 }
 
 const list = defineCommand({
@@ -117,7 +161,7 @@ const get = defineCommand({
         fatal(`no zone matching ${args.name}`);
         return;
       }
-      const [hostnames, fallback] = await Promise.all([
+      const [hostnames, fallback, routes, domains] = await Promise.all([
         client.customHostnamesList(zone.id),
         client.fallbackOriginGet(zone.id).catch((error: unknown) => {
           // CF returns 404 when no fallback is configured — that's
@@ -128,8 +172,24 @@ const get = defineCommand({
           }
           throw error;
         }),
+        client.workersRoutesList(zone.id),
+        client.workersDomainsList(zone.id).catch((error: unknown) => {
+          // Account-scoped lookup: without an account id we
+          // can't query it. Surface as `undefined` (distinct
+          // from "ran and found nothing") so the aggregator
+          // can render the gap rather than failing.
+          if (error instanceof AuthError && error.code === 'no-account') {
+            return undefined;
+          }
+          throw error;
+        }),
       ]);
-      writeZoneDetail({ zone, hostnames, fallback }, args.json);
+      writeZoneDetail({
+        zone,
+        hostnames,
+        fallback,
+        bindings: { routes, domains },
+      }, args.json);
     });
   },
 });

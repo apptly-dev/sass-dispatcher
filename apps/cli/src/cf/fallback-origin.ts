@@ -15,7 +15,7 @@ import { type FallbackOrigin } from '../types';
  */
 export function get(
   raw: Cloudflare,
-  zoneId: string,
+  zoneID: string,
 ): Promise<FallbackOrigin> {
-  return raw.customHostnames.fallbackOrigin.get({ zone_id: zoneId });
+  return raw.customHostnames.fallbackOrigin.get({ zone_id: zoneID });
 }

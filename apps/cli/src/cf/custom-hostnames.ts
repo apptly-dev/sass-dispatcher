@@ -15,10 +15,10 @@ import { type CustomHostname } from '../types';
  */
 export async function list(
   raw: Cloudflare,
-  zoneId: string,
+  zoneID: string,
 ): Promise<CustomHostname[]> {
   const hostnames: CustomHostname[] = [];
-  for await (const hostname of raw.customHostnames.list({ zone_id: zoneId })) {
+  for await (const hostname of raw.customHostnames.list({ zone_id: zoneID })) {
     hostnames.push(hostname);
   }
   return hostnames;

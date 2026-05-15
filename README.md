@@ -49,23 +49,47 @@ invocation (`node ./apps/cli/dist/bin.mjs`) doesn't read
 `.env` — that's deliberate, so scripted use stays explicit
 about its environment.
 
+Account-scoped operations (`bindings list` for Worker
+Custom Domains, eventually dispatch namespaces) also need
+`CLOUDFLARE_ACCOUNT_ID=…` in the same file. Auto-detection
+will land later; today the env var is the only source, and
+those operations skip with a warning when it's unset.
+
 ## Scripting the CLI
 
 Scriptable commands like `zones list`,
-`hostnames list <zone>`, and `fallback get <zone>`
-write data rows directly to stdout, one row per line;
-warnings and errors go to stderr. The default row
-shape is space-separated fields, safe for piping into
-`awk`, `xargs`, `cut`, etc. Pass `--json` to switch
-the data stream to one JSON envelope per record
-(NDJSON for `list`, a single envelope for `get`) when
-you want richer fields under `jq`.
+`hostnames list <zone>`, `fallback get <zone>`, and
+`bindings list <zone>` write data rows directly to
+stdout, one row per line; warnings and errors go to
+stderr. The default row shape is space-separated
+fields, safe for piping into `awk`, `xargs`, `cut`,
+etc. Pass `--json` to switch the data stream to one
+JSON envelope per record (NDJSON for `list`, a single
+envelope for `get`) when you want richer fields under
+`jq`.
 
 `zones get <zone>` is the aggregated diagnostic view —
 it prints labelled sections covering zone metadata,
-custom hostnames, and the SaaS fallback origin. Under
-`--json` it emits a single composite envelope
-(`{ zone, hostnames, fallback }`).
+custom hostnames, the SaaS fallback origin, and the
+Worker bindings (routes + Custom Domains) attached to
+the zone. Under `--json` it emits a single composite
+envelope (`{ zone, hostnames, fallback, bindings }`).
+
+`bindings list <zone>` covers the worker layer one
+zone at a time:
+
+```text
+route  <id> <pattern>  <script>
+domain <id> <hostname> <service>
+```
+
+Each row's first field tags the kind, making it easy
+to spot whether a zone is served by a legacy Worker
+Route (Host/path pattern match) or a Worker Custom
+Domain (which catches SaaS fallback traffic). Worker
+Custom Domains is account-scoped, so
+`CLOUDFLARE_ACCOUNT_ID` must be set or the domains
+half is skipped with a stderr warning.
 
 When invoked as `pnpm cli`, pnpm itself prints a three-line
 script banner (the `> @apptly/...` headers and a blank
@@ -76,6 +100,7 @@ get a clean stdout for scripting, pass `--silent` to pnpm:
 pnpm --silent cli zones list | wc -l   # exact zone count
 pnpm --silent cli hostnames list apptly.me --json | jq -r '.hostname'
 pnpm --silent cli zones get apptly.me --json | jq -r '.hostnames[].hostname'
+pnpm --silent cli bindings list apptly.me --json | jq -r 'select(.kind=="domain").hostname'
 ```
 
 Calling the built binary directly

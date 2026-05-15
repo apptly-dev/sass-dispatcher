@@ -8,6 +8,7 @@
 export type AuthSource = 'env' | 'wrangler';
 
 export interface Auth {
+  readonly accountID?: string
   readonly configPath?: string
   readonly expiresAt?: Date
   readonly scopes?: readonly string[]
@@ -15,4 +16,4 @@ export interface Auth {
   readonly token: string
 }
 
-export type AuthErrorCode = 'expired' | 'malformed' | 'no-token';
+export type AuthErrorCode = 'expired' | 'malformed' | 'no-account' | 'no-token';

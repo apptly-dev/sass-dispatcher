@@ -149,14 +149,16 @@ matcher-driven routing lands later. The worker
 demonstrates the API with a banner `notFound` and
 no routes. The CLI carries `whoami` (auth pipeline)
 plus the read-only inspection commands `zones list`,
-`zones get <zone>`, `hostnames list <zone>`, and
-`fallback get <zone>`.
+`zones get <zone>`, `hostnames list <zone>`,
+`fallback get <zone>`, and `bindings list <zone>`.
 
 `zones get` is the aggregated diagnostic view —
 after resolving the zone it fetches custom
-hostnames and the SaaS fallback origin in parallel
-and emits labelled multi-line sections (or a
-composite `{ zone, hostnames, fallback }` envelope
+hostnames, the SaaS fallback origin, and the Worker
+bindings (routes + Custom Domains) attached to the
+zone in parallel, then emits labelled multi-line
+sections (or a composite
+`{ zone, hostnames, fallback, bindings }` envelope
 under `--json`). The per-resource commands cover the
 same data sliced one resource at a time for
 scripted single-resource access. A zone with no
@@ -168,9 +170,44 @@ plain space-separated rows by default, with
 `--json` switching to NDJSON (`list`) or a single
 envelope (`get`).
 
+`bindings list <zone>` exists to answer
+"how is a Worker attached to this zone?" Routes are
+Host/path pattern bindings (legacy, zone-scoped);
+Worker Custom Domains attach the Worker to a
+hostname directly (account-scoped, the binding that
+catches Cloudflare-for-SaaS fallback traffic).
+Rows are tagged by kind (`route` / `domain`) so
+`grep`/`jq` can filter cleanly. The aggregator's
+`bindings:` section follows the same layout.
+
 `--json` currently echoes the full CF SDK envelope
 for every resource — large, but easy to project
 later with `jq`. A future `--verbose` flag will
 flip the default to a curated projection of the
 fields the CLI actually surfaces, keeping the raw
 shape behind the flag.
+
+## Account-scoped operations
+
+`CLOUDFLARE_ACCOUNT_ID` is read from the env by
+`loadAuth` alongside `CLOUDFLARE_API_TOKEN` and
+attached to the resolved `Auth`. **Currently** the
+CLI does not auto-resolve the account id — that's
+scaffold-state iteration discipline, not the design
+endpoint. Auto-detection, our own minted tokens, and
+refresh all live on the roadmap; today's env-only
+floor exists so we can ship diagnostic surface
+faster, and the `Auth.accountID?: string` +
+`AuthError('no-account')` seams are stable for the
+detection step to plug into later.
+
+`Client.workersDomainsList` rejects with
+`AuthError('no-account')` when no account id is
+bound. The `bindings list` and `zones get` commands
+both catch that specific miss and continue with a
+warning (routes alone for `bindings`, a
+`domains: unknown (CLOUDFLARE_ACCOUNT_ID unset)`
+section for `zones get`) — partial output beats
+refusing to answer the rest of the question. Any
+other error from the domains lookup bubbles through
+`withClient` as a normal `APIError`.
