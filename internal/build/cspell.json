@@ -12,6 +12,7 @@
     "obuild",
     "poupe",
     "prepack",
+    "taistamp",
     "vitest",
     "workerd",
     "wrangler"

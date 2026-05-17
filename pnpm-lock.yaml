@@ -105,6 +105,13 @@ importers:
         version: 4.90.1(@cloudflare/workers-types@4.20260511.1)
 
   packages/dispatcher:
+    dependencies:
+      '@kagal/ed25519-secret':
+        specifier: ^0.2.0
+        version: 0.2.0
+      '@kagal/taistamp':
+        specifier: ~0.1.0
+        version: 0.1.0
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20260317.1
@@ -988,6 +995,14 @@ packages:
     resolution: {integrity: sha512-Ofoizl+AwmnhYbZO2d8MkNRlFaJmY7UXPqRPT/k9cDBq9H70EC6/X6gS9MdYaTBB1m9oSsz+dfi+NVS4wHyVYA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
+
+  '@kagal/ed25519-secret@0.2.0':
+    resolution: {integrity: sha512-di7B7OUrF+nimv0F4djY4gIQO5+UAx9+sWQbTS4NrXIjJDj9QGulQOHsqMNqxPg75z0Xm0ywy9qBc8cz9p8Wkw==}
+    engines: {node: '>= 20.20.1', pnpm: '>= 10.33.2'}
+
+  '@kagal/taistamp@0.1.0':
+    resolution: {integrity: sha512-xc4B8Qe1MUDqeI5pmPs3e8r5XjMm+Xn/F5ZjH9V9l+N1OzlObx6GXaNAHWQq/6YjGncznxnfVnaGWuU6yJmIYQ==}
+    engines: {node: '>= 20.20.1', pnpm: '>= 10.33.2'}
 
   '@microsoft/tsdoc-config@0.18.1':
     resolution: {integrity: sha512-9brPoVdfN9k9g0dcWkFeA7IH9bbcttzDJlXvkf8b2OBzd5MueR1V2wkKBL0abn0otvmkHJC6aapBOTJDDeMCZg==}
@@ -3532,6 +3547,12 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@kagal/cross-test@0.1.3': {}
+
+  '@kagal/ed25519-secret@0.2.0': {}
+
+  '@kagal/taistamp@0.1.0':
+    dependencies:
+      '@kagal/ed25519-secret': 0.2.0
 
   '@microsoft/tsdoc-config@0.18.1':
     dependencies:

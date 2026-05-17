@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
+    },
+    "./taistamp": {
+      "types": "./dist/taistamp.d.mts",
+      "default": "./dist/taistamp.mjs"
     }
   },
   "files": [
@@ -32,6 +36,10 @@
     "type-check:main": "tsc --noEmit -p tsconfig.json",
     "type-check:tests": "tsc --noEmit -p tsconfig.tests.json",
     "type-check:tools": "tsc --noEmit -p tsconfig.tools.json"
+  },
+  "dependencies": {
+    "@kagal/ed25519-secret": "^0.2.0",
+    "@kagal/taistamp": "~0.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
