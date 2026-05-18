@@ -2,13 +2,12 @@ import { newDispatcher } from '@apptly/sass-dispatcher';
 
 import type { Env } from './env';
 
-const dispatch = newDispatcher<Env, ExecutionContext>({
-  routes: [],
-  notFound: () => new Response('sass-dispatcher (stub)\n', {
-    headers: { 'content-type': 'text/plain' },
+const handler: ExportedHandler<Env> = {
+  fetch: newDispatcher<Env>({
+    notFound: () => new Response('sass-dispatcher (stub)\n', {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    }),
   }),
-});
+};
 
-export default {
-  fetch: dispatch,
-} satisfies ExportedHandler<Env>;
+export default handler;

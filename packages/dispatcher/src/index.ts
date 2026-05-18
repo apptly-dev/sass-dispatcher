@@ -6,6 +6,10 @@ export {
 } from './handler-store';
 export {
   type DispatcherConfig,
-  type Route,
-  type RouteHandler,
+  type HostRouter,
+  type HostRules,
+  type RedirectCode,
+  type RedirectOptions,
+  type Rule,
+  type TaistampOptions,
 } from './types';

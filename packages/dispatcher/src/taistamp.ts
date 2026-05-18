@@ -1,7 +1,8 @@
 import { parseSecretsToKeys, splitLast } from '@kagal/ed25519-secret';
-import { newTaistampHandler } from '@kagal/taistamp';
+import { newTaistampHandler, TAISTAMP_PATH } from '@kagal/taistamp';
 
 import type { HandlerBuilder } from './handler-store';
+import type { HostRouter, TaistampOptions } from './types';
 import { newHandlerStore } from './handler-store';
 
 const buildTaistamp: HandlerBuilder<undefined> = async (secrets) => {
@@ -47,5 +48,34 @@ const buildTaistamp: HandlerBuilder<undefined> = async (secrets) => {
  */
 export const taistampHandler = newHandlerStore(buildTaistamp);
 
+// The taistamp draft restricts taistamp requests to
+// the exact path (§5: "the request URI MUST be the
+// exact path above"); we 404 siblings here rather
+// than deferring to the dispatcher's `notFound`, so a
+// custom fallback can't serve unrelated content under
+// the well-known namespace.
+const taistampPrefixNotFound = (): Response =>
+  new Response('Not Found\n', {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+
+/**
+ * Mount the taistamp variant onto a host router:
+ * `/.well-known/taistamp` serves the cached handler
+ * resolved per request from `options.taistamp(env)`;
+ * anything under the prefix 404s (the TAI64N spec
+ * reserves siblings).
+ */
+export const mountTaistampHandler = <E>(
+  router: HostRouter<E>,
+  options: TaistampOptions<E>,
+): void => {
+  router.all(TAISTAMP_PATH, (request, env) =>
+    taistampHandler(options.taistamp(env))(request));
+  router.all(`${TAISTAMP_PATH}/*`, taistampPrefixNotFound);
+};
+
 export { type Handler } from './handler-store';
+
 export { TAISTAMP_PATH } from '@kagal/taistamp';

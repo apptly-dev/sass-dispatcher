@@ -6,10 +6,14 @@ Routing primitives shared by
 
 ## Exports
 
-- `newDispatcher(config)` — request resolver
-  scaffold. Falls back to the configured `notFound`
-  (default `404`); matcher-driven routing lands as
-  the dispatcher firms up.
+- `newDispatcher(config)` — builds an
+  `ExportedHandlerFetchHandler<E>` that dispatches by
+  `URL.hostname`. Each configured host gets an itty
+  router built at config time; the matching host's
+  rules are tried in order. Unknown hosts and no-match
+  paths fall through to `config.notFound` (default
+  404 `text/plain`). Hostname matching is exact —
+  `taistamp.org` does not match `www.taistamp.org`.
 - `newHandlerStore(builder)` — per-isolate memoising
   store. Binds a builder + optional options type `T`
   to a `Map<K, Promise<Handler>>` and returns a
@@ -25,6 +29,99 @@ Routing primitives shared by
   | Promise<Handler>`. `K` defaults to `string |
   undefined` so bindings whose value may legitimately
   be absent flow in unmolested.
+- `Rule<E>` — discriminated union of the rule
+  variants below: `RedirectOptions |
+  TaistampOptions<E>`.
+- `RedirectOptions` — redirect-rule variant
+  (see below).
+- `TaistampOptions<E>` — taistamp-rule variant
+  (see below).
+- `RedirectCode` — `301 | 302 | 303 | 307 | 308`,
+  the 30x family minus 300 (no `Location`), 304
+  (conditional), 305 (deprecated) and 306
+  (reserved).
+- `HostRules<E>` — `Record<string, readonly Rule<E>[]>`.
+  Per-host rule arrays, keyed by hostname.
+- `HostRouter<E>` — alias for the itty router shape
+  used by `newDispatcher` internally and by mounter
+  helpers like `mountTaistampHandler` (see the
+  `./taistamp` subpath below). Exported so callers
+  building their own router can type the variable.
+- `DispatcherConfig<E>` — `{ hosts?: HostRules<E>;
+  notFound? }`.
+
+## Rule variants
+
+Per-host rule arrays are tried in order — first match
+wins. Each entry is a `Rule<E>`:
+
+- `RedirectOptions` — `{ redirectTo, redirectCode,
+  match? }`. Static redirect; `redirectTo` is sent
+  verbatim (no `:param` substitution from `match`
+  yet). `redirectCode` is narrowed to `RedirectCode`.
+  `match` is an itty path pattern and defaults to
+  `/*` so a host-wide redirect can omit it.
+- `TaistampOptions<E>` — `{ taistamp }`. Claims
+  `/.well-known/taistamp` on the owning host and
+  404s anything under that prefix. `taistamp` is
+  `(env: E) => string`, pulling the secret out of
+  the caller's env. The taistamp draft pins the
+  request URI to the exact path, so no `match`
+  override.
+
+Rules whose shape matches none of the above
+`console.warn` (naming the offending host) and are
+skipped at construction — reachable only via
+type-system bypass (cast, JSON import, etc.).
+
+## `./taistamp` subpath
+
+The taistamp variant's building blocks are also
+exposed at `@apptly/sass-dispatcher/taistamp` for
+callers mounting on their own router or using the
+cached handler directly without `newDispatcher`:
+
+- `mountTaistampHandler(router, options)` —
+  registers `/.well-known/taistamp` + the sibling
+  404 on the given `HostRouter<E>`. The same
+  wiring `newDispatcher` does internally for a
+  `TaistampOptions<E>` rule.
+- `taistampHandler(secrets)` — per-isolate cached
+  `Handler` factory; pass the parsed secret string
+  (or `undefined` / `''` for the unsigned
+  handler). See `newHandlerStore` semantics below.
+- `TAISTAMP_PATH` — re-exported from
+  `@kagal/taistamp`; the well-known path the
+  taistamp draft pins.
+- `Handler` — also re-exported from the main
+  entry; available here so subpath-only callers
+  don't need both imports.
+
+## `newDispatcher` in use
+
+```ts
+import { newDispatcher } from '@apptly/sass-dispatcher';
+
+interface Env {
+  readonly TAISTAMP_SECRET: string;
+}
+
+export default {
+  fetch: newDispatcher<Env>({
+    hosts: {
+      'taistamp.example': [
+        { taistamp: (env) => env.TAISTAMP_SECRET },
+      ],
+      'legacy.example': [
+        {
+          redirectTo: 'https://new.example/',
+          redirectCode: 301,
+        },
+      ],
+    },
+  }),
+};
+```
 
 ## `newHandlerStore` in use
 
