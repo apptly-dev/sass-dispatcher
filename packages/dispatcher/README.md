@@ -16,19 +16,29 @@ Routing primitives shared by
   `taistamp.org` does not match `www.taistamp.org`.
 - `newHandlerStore(builder)` — per-isolate memoising
   store. Binds a builder + optional options type `T`
-  to a `Map<K, Promise<Handler>>` and returns a
-  synchronous factory `(key, options?) => Handler`
+  to a `Map<K, Promise<Handler<E>>>` and returns a
+  synchronous factory `(key, options?) => Handler<E>`
   whose handlers transparently await the cached
   build on first request.
-- `Handler` — `(request: Request) => Promise<Response>
-  | Response`. Request handler whose env-derived
-  inputs were absorbed at build time by the builder
-  closure; distinct from `RouteHandler`, which
-  receives env per-request.
-- `HandlerBuilder<T, K>` — `(key, options?) => Handler
-  | Promise<Handler>`. `K` defaults to `string |
-  undefined` so bindings whose value may legitimately
-  be absent flow in unmolested.
+- `Handler<E>` — `(request: Request<unknown,
+  IncomingRequestCfProperties>, env?: E, context?:
+  ExecutionContext) => Promise<Response> | Response`.
+  The unified dispatch-target shape; the request type
+  matches Cloudflare's incoming request so handlers
+  can read `request.cf` without casts. `env` and
+  `context` are optional because handlers built
+  through `newHandlerStore` typically absorb
+  env-derived inputs at build time and ignore the
+  fetch-time pair, so an implementation can drop them
+  entirely (`() => Response` is a valid `Handler`).
+  The dispatcher narrows itty's broader `IRequest` to
+  this shape via the router's generic parameter.
+- `HandlerBuilder<T, K, E>` — `(key, options?, env?:
+  E) => Handler<E> | Promise<Handler<E>>`. `K`
+  defaults to `string | undefined` so bindings whose
+  value may legitimately be absent flow in
+  unmolested; `E` defaults to `unknown` for builders
+  that ignore env at build time.
 - `Rule<E>` — discriminated union of the rule
   variants below: `RedirectOptions |
   TaistampOptions<E>`.

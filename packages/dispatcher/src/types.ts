@@ -1,13 +1,22 @@
 import type { IRequest, IttyRouterType } from 'itty-router';
 
 /**
+ * itty's `IRequest.cf` is the broader `CfProperties`,
+ * but Cloudflare delivers an `IncomingRequest` at
+ * runtime. The dispatcher narrows itty's request type
+ * at the router boundary so route handlers see the
+ * cf-aware request that {@link Handler} expects.
+ */
+export type CfRequest = IRequest & Request<unknown, IncomingRequestCfProperties>;
+
+/**
  * The per-host router used by `newDispatcher` and by
  * the `mount*Handler` helpers each rule variant
  * provides. Factored once so every mounter and the
  * dispatcher share the same `E`-parameterised shape.
  */
 export type HostRouter<E = unknown> = IttyRouterType<
-  IRequest,
+  CfRequest,
   [E, ExecutionContext],
   Response | undefined
 >;
@@ -47,6 +56,31 @@ export interface TaistampOptions<E = unknown> {
 }
 
 /**
+ * The shape every dispatch target collapses to:
+ * `(request, env?, context?) => Response`. `request`
+ * carries Cloudflare's `IncomingRequestCfProperties`
+ * so handlers can read `request.cf` without casts.
+ *
+ * The dispatcher narrows itty's broader `IRequest`
+ * to this shape via the router's generic parameter,
+ * keeping the reconciliation in library internals
+ * rather than on the public surface.
+ *
+ * `env` and `context` are optional because handlers
+ * built through {@link newHandlerStore} typically
+ * absorb env-derived inputs at build time and ignore
+ * the fetch-time pair; the dispatcher still forwards
+ * both at every call site. Consumers that need typed
+ * env access (notably `DispatcherConfig.notFound`)
+ * narrow with a guard or non-null assertion.
+ */
+export type Handler<E = unknown> = (
+  request: Request<unknown, IncomingRequestCfProperties>,
+  env?: E,
+  context?: ExecutionContext,
+) => Promise<Response> | Response;
+
+/**
  * A single dispatch rule. Per-host rule arrays are
  * tried in order — first match wins. Each variant
  * pairs with a `mount*Handler` colocated with the
@@ -69,9 +103,5 @@ export type HostRules<E = unknown> = Readonly<
  */
 export interface DispatcherConfig<E = unknown> {
   readonly hosts?: HostRules<E>
-  readonly notFound?: (
-    request: Request<unknown, IncomingRequestCfProperties>,
-    env: E,
-    context: ExecutionContext,
-  ) => Promise<Response> | Response
+  readonly notFound?: Handler<E>
 }

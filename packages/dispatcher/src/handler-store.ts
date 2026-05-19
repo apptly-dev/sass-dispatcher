@@ -1,25 +1,28 @@
 /**
  * Memoising store for per-isolate caching of built
- * request handlers keyed by their build input.
+ * fetch handlers keyed by their build input.
  */
 
-/**
- * Request handler whose env-derived inputs were
- * absorbed at build time by the builder closure.
- * Distinct from a fetch handler that receives env
- * and context per-request.
- */
-export type Handler = (request: Request) => Promise<Response> | Response;
+import type { Handler } from './types';
 
 /**
  * Builder consumed by {@link newHandlerStore}. Receives
- * the cache key and optional caller-supplied options;
- * may resolve synchronously or asynchronously.
+ * the cache key, optional caller-supplied options, and
+ * the request-time `env` of the first build; may resolve
+ * synchronously or asynchronously.
+ *
+ * `env` is supplied for build-time access to isolate-
+ * stable handles (service bindings, dispatch namespaces,
+ * KV/D1 bindings). The builder runs once per key, so it
+ * sees only the first request's env — safe on workers
+ * because env is per-isolate stable, but do not close
+ * over fetch-time inputs like `context`.
  */
-export type HandlerBuilder<T, K = string | undefined> = (
+export type HandlerBuilder<T, K = string | undefined, E = unknown> = (
   key: K,
   options?: T,
-) => Handler | Promise<Handler>;
+  env?: E,
+) => Handler<E> | Promise<Handler<E>>;
 
 /**
  * Bind a {@link HandlerBuilder} to a per-isolate cache,
@@ -44,22 +47,25 @@ export type HandlerBuilder<T, K = string | undefined> = (
  *
  * The key type defaults to `string | undefined` so a
  * builder whose key may legitimately be absent flows in
- * unmolested.
+ * unmolested. E defaults to `unknown` for builders that
+ * absorb their env-derived inputs into the key and
+ * ignore env/context at invocation.
  */
-export const newHandlerStore = <T, K = string | undefined>(
-  builder: HandlerBuilder<T, K>,
-): (key: K, options?: T) => Handler => {
-  const cache = new Map<K, Promise<Handler>>();
-  return (key: K, options?: T): Handler => async (request) => {
-    let pending = cache.get(key);
-    if (pending === undefined) {
-      pending = Promise.resolve(builder(key, options)).catch((error: unknown) => {
-        cache.delete(key);
-        throw error;
-      });
-      cache.set(key, pending);
-    }
-    const handler = await pending;
-    return handler(request);
-  };
+export const newHandlerStore = <T, K = string | undefined, E = unknown>(
+  builder: HandlerBuilder<T, K, E>,
+): (key: K, options?: T) => Handler<E> => {
+  const cache = new Map<K, Promise<Handler<E>>>();
+  return (key: K, options?: T): Handler<E> =>
+    async (request, env, context) => {
+      let pending = cache.get(key);
+      if (pending === undefined) {
+        pending = Promise.resolve(builder(key, options, env)).catch((error: unknown) => {
+          cache.delete(key);
+          throw error;
+        });
+        cache.set(key, pending);
+      }
+      const handler = await pending;
+      return handler(request, env, context);
+    };
 };

@@ -1,14 +1,16 @@
-import { type IRequest, IttyRouter } from 'itty-router';
+import { IttyRouter } from 'itty-router';
 
 import type {
+  CfRequest,
   DispatcherConfig,
+  Handler,
   HostRouter,
   RedirectOptions,
   Rule,
 } from './types';
 import { mountTaistampHandler } from './taistamp';
 
-const defaultNotFound = (): Response =>
+const defaultNotFound: Handler = () =>
   new Response('Not Found\n', {
     status: 404,
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
@@ -34,7 +36,7 @@ const buildHostRouter = <E>(
   rules: readonly Rule<E>[],
 ): HostRouter<E> => {
   const router: HostRouter<E> = IttyRouter<
-    IRequest,
+    CfRequest,
     [E, ExecutionContext],
     Response | undefined
   >();
@@ -75,7 +77,7 @@ const buildHostRouter = <E>(
 export const newDispatcher = <E>(
   config: DispatcherConfig<E> = {},
 ): ExportedHandlerFetchHandler<E> => {
-  const fallthrough = config.notFound ?? defaultNotFound;
+  const fallthrough: Handler<E> = config.notFound ?? defaultNotFound;
   const routers = new Map(
     Object.entries(config.hosts ?? {}).map(
       ([host, rules]) => [host, buildHostRouter(host, rules)] as const,

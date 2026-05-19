@@ -71,11 +71,10 @@ export const mountTaistampHandler = <E>(
   router: HostRouter<E>,
   options: TaistampOptions<E>,
 ): void => {
-  router.all(TAISTAMP_PATH, (request, env) =>
-    taistampHandler(options.taistamp(env))(request));
+  router.all(TAISTAMP_PATH, (request, env, context) =>
+    taistampHandler(options.taistamp(env))(request, env, context));
   router.all(`${TAISTAMP_PATH}/*`, taistampPrefixNotFound);
 };
 
-export { type Handler } from './handler-store';
-
+export { type Handler } from './types';
 export { TAISTAMP_PATH } from '@kagal/taistamp';

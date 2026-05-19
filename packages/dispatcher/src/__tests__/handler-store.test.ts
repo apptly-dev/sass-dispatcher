@@ -5,7 +5,14 @@ import { type Handler, newHandlerStore } from '..';
 const ok = (body: string): Response =>
   new Response(body, { status: 200 });
 
-const request = (): Request => new Request('https://example.com/');
+// Type-only cast — at runtime the object is a plain
+// Request with no `cf` envelope. Fine while the SUT
+// only reads url/headers/method.
+const request = (): Request<unknown, IncomingRequestCfProperties> =>
+  new Request('https://example.com/') as unknown as Request<
+    unknown,
+    IncomingRequestCfProperties
+  >;
 
 describe('newHandlerStore', () => {
   it('builds once per key when called repeatedly with the same key', async () => {
@@ -62,6 +69,34 @@ describe('newHandlerStore', () => {
 
     expect(await response.text()).toBe('tagged');
     expect(seenOptions).toEqual({ label: 'tagged' });
+  });
+
+  it('threads env to the builder and env+context to the built handler', async () => {
+    interface Env { tag: string }
+    const seen: {
+      buildEnv?: Env
+      context?: ExecutionContext
+      env?: Env
+    } = {};
+    const store = newHandlerStore<undefined, string | undefined, Env>(
+      (_key, _options, env) => {
+        seen.buildEnv = env;
+        return (_request, invokeEnv, context) => {
+          seen.env = invokeEnv;
+          seen.context = context;
+          return ok('threaded');
+        };
+      },
+    );
+
+    const env: Env = { tag: 'env' };
+    const context = {} as ExecutionContext;
+    const response = await store('k')(request(), env, context);
+
+    expect(await response.text()).toBe('threaded');
+    expect(seen.buildEnv).toBe(env);
+    expect(seen.env).toBe(env);
+    expect(seen.context).toBe(context);
   });
 
   it('builds only once when concurrent requests race the same key', async () => {

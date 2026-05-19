@@ -9,6 +9,18 @@ const TEST_SECRET = `${TEST_SELECTOR}:${TEST_SEED_B64}`;
 
 const url = `https://example.com${TAISTAMP_PATH}`;
 
+// Type-only cast — at runtime the object is a plain
+// Request with no `cf` envelope. Fine while the SUT
+// only reads url/headers/method.
+const newIncoming = (
+  input: string,
+  init?: RequestInit,
+): Request<unknown, IncomingRequestCfProperties> =>
+  new Request(input, init) as unknown as Request<
+    unknown,
+    IncomingRequestCfProperties
+  >;
+
 const encodeBase64 = (bytes: Uint8Array): string => {
   let s = '';
   // eslint-disable-next-line unicorn/prefer-code-point -- operating on bytes, not code points
@@ -32,7 +44,7 @@ describe('taistampHandler', () => {
 
   it('produces an unsigned response when called with undefined', async () => {
     const response = await taistampHandler(undefined)(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(response.status).toBe(200);
@@ -48,7 +60,7 @@ describe('taistampHandler', () => {
 
   it('treats an empty-string secret as unsigned', async () => {
     const response = await taistampHandler('')(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(response.status).toBe(200);
@@ -58,7 +70,7 @@ describe('taistampHandler', () => {
 
   it('signs the response when called with a valid secret', async () => {
     const response = await taistampHandler(TEST_SECRET)(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(response.status).toBe(200);
@@ -70,7 +82,7 @@ describe('taistampHandler', () => {
 
   it('does not sign when the request omits TAI-Nonce', async () => {
     const response = await taistampHandler(TEST_SECRET)(
-      new Request(url),
+      newIncoming(url),
     );
 
     expect(response.status).toBe(200);
@@ -83,10 +95,10 @@ describe('taistampHandler', () => {
     const altSecret = `${altSelector}:${TEST_SEED_B64}`;
 
     const r1 = await taistampHandler(TEST_SECRET)(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
     const r2 = await taistampHandler(altSecret)(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(r1.headers.get('tai-key-selector')).toBe(TEST_SELECTOR);
@@ -102,7 +114,7 @@ describe('taistampHandler', () => {
     ].join(' ');
 
     const response = await taistampHandler(multi)(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(response.status).toBe(200);
@@ -111,7 +123,7 @@ describe('taistampHandler', () => {
 
   it('treats a delimiter-only string as unsigned', async () => {
     const response = await taistampHandler('   ,;|  ')(
-      new Request(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
+      newIncoming(url, { headers: { 'tai-nonce': makeNonceHeader() } }),
     );
 
     expect(response.status).toBe(200);
@@ -121,7 +133,7 @@ describe('taistampHandler', () => {
 
   it('rejects a malformed entry in strict mode', async () => {
     await expect(
-      taistampHandler(`${TEST_SECRET} not-a-secret`)(new Request(url)),
+      taistampHandler(`${TEST_SECRET} not-a-secret`)(newIncoming(url)),
     ).rejects.toThrow(TypeError);
   });
 });
