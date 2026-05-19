@@ -9,6 +9,7 @@ import type {
   Rule,
 } from './types';
 import { mountTaistampHandler } from './taistamp';
+import { getValue } from './value';
 
 const defaultNotFound: Handler = () =>
   new Response('Not Found\n', {
@@ -18,22 +19,22 @@ const defaultNotFound: Handler = () =>
 
 const mountRedirectHandler = <E>(
   router: HostRouter<E>,
-  options: RedirectOptions,
+  options: RedirectOptions<E>,
 ): void => {
   // Static status-code redirect; `redirectTo` sent
   // verbatim (no `:param` substitution). `match`
   // defaults to `/*` so a host-wide redirect can
   // omit the path pattern.
-  router.all(options.match ?? '/*', () =>
+  router.all(options.match ?? '/*', (_request, env) =>
     new Response(undefined, {
       status: options.redirectCode,
-      headers: { Location: options.redirectTo },
+      headers: { Location: getValue(options.redirectTo, env) },
     }));
 };
 
 const buildHostRouter = <E>(
   host: string,
-  rules: readonly Rule<E>[],
+  rules: readonly Rule<E>[] | Rule<E>,
 ): HostRouter<E> => {
   const router: HostRouter<E> = IttyRouter<
     CfRequest,
@@ -41,7 +42,7 @@ const buildHostRouter = <E>(
     Response | undefined
   >();
 
-  for (const rule of rules) {
+  for (const rule of Array.isArray(rules) ? rules : [rules]) {
     if ('taistamp' in rule) {
       // /.well-known/taistamp + sibling 404.
       mountTaistampHandler(router, rule);
@@ -77,7 +78,7 @@ const buildHostRouter = <E>(
 export const newDispatcher = <E>(
   config: DispatcherConfig<E> = {},
 ): ExportedHandlerFetchHandler<E> => {
-  const fallthrough: Handler<E> = config.notFound ?? defaultNotFound;
+  const notFound: Handler<E> = config.notFound ?? defaultNotFound;
   const routers = new Map(
     Object.entries(config.hosts ?? {}).map(
       ([host, rules]) => [host, buildHostRouter(host, rules)] as const,
@@ -90,6 +91,6 @@ export const newDispatcher = <E>(
     const response: Response | undefined = router ?
       await router.fetch(request, env, context) :
       undefined;
-    return response ?? fallthrough(request, env, context);
+    return response ?? notFound(request, env, context);
   };
 };

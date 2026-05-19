@@ -4,6 +4,7 @@ import { newTaistampHandler, TAISTAMP_PATH } from '@kagal/taistamp';
 import type { HandlerBuilder } from './handler-store';
 import type { HostRouter, TaistampOptions } from './types';
 import { newHandlerStore } from './handler-store';
+import { getValue } from './value';
 
 const buildTaistamp: HandlerBuilder<undefined> = async (secrets) => {
   if (!secrets) {
@@ -63,16 +64,18 @@ const taistampPrefixNotFound = (): Response =>
 /**
  * Mount the taistamp variant onto a host router:
  * `/.well-known/taistamp` serves the cached handler
- * resolved per request from `options.taistamp(env)`;
- * anything under the prefix 404s (the TAI64N spec
- * reserves siblings).
+ * resolved per request from
+ * `getValue(options.taistamp, env)` (literal string
+ * or env-time accessor); anything under the prefix
+ * 404s, since the taistamp draft pins the request URI
+ * to the exact path.
  */
 export const mountTaistampHandler = <E>(
   router: HostRouter<E>,
   options: TaistampOptions<E>,
 ): void => {
   router.all(TAISTAMP_PATH, (request, env, context) =>
-    taistampHandler(options.taistamp(env))(request, env, context));
+    taistampHandler(getValue(options.taistamp, env))(request, env, context));
   router.all(`${TAISTAMP_PATH}/*`, taistampPrefixNotFound);
 };
 

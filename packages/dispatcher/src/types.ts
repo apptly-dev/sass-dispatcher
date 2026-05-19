@@ -35,24 +35,31 @@ export type RedirectCode = 301 | 302 | 303 | 307 | 308;
  * `status + Location: redirectTo` for any path
  * matching `match` (an itty path pattern, default
  * `/*`). `redirectTo` is sent verbatim — no `:param`
- * substitution from `match` yet.
+ * substitution from `match` yet. Accepts a literal
+ * string or an env-time accessor `(env) => string`
+ * via {@link ValueOrAccessor}.
  */
-export interface RedirectOptions {
+export interface RedirectOptions<E = unknown> {
   readonly match?: string
   readonly redirectCode: RedirectCode
-  readonly redirectTo: string
+  readonly redirectTo: ValueOrAccessor<string, E>
 }
 
 /**
  * The taistamp variant of {@link Rule}. Claims
  * `/.well-known/taistamp` on the owning host and 404s
- * anything under the prefix; the accessor pulls the
- * secret value out of the caller's env so the lib
- * never names a specific env field. The TAI64N spec
- * reserves the path, so no `match` override.
+ * anything under the prefix; `taistamp` packs one or
+ * more `selector:base64` secrets (the last entry
+ * signs, leading entries are reserved for rotation)
+ * and accepts either a literal string or an env-time
+ * accessor `(env) => string` via
+ * {@link ValueOrAccessor}, so the lib never names a
+ * specific env field. The taistamp draft pins the
+ * request URI to the exact path, so no `match`
+ * override.
  */
 export interface TaistampOptions<E = unknown> {
-  readonly taistamp: (env: E) => string
+  readonly taistamp: ValueOrAccessor<string, E>
 }
 
 /**
@@ -81,21 +88,34 @@ export type Handler<E = unknown> = (
 ) => Promise<Response> | Response;
 
 /**
+ * Rule-field value supplied either as a bare `T` or as
+ * an env-time resolver `(env: E) => T`. The dispatcher
+ * unwraps the function form on each matching request.
+ *
+ * Not usable on rule fields whose static type is itself
+ * a function, because `typeof === 'function'` can't
+ * distinguish the two forms at runtime.
+ */
+export type ValueOrAccessor<T, E = unknown> = ((env: E) => T) | T;
+
+/**
  * A single dispatch rule. Per-host rule arrays are
  * tried in order — first match wins. Each variant
  * pairs with a `mount*Handler` colocated with the
  * variant's implementation.
  */
-export type Rule<E = unknown> = RedirectOptions | TaistampOptions<E>;
+export type Rule<E = unknown> = RedirectOptions<E> | TaistampOptions<E>;
 
 /**
- * Per-host rule tables, keyed by `URL.hostname`. The
- * dispatcher matches the request's hostname against
- * these keys; unknown hostnames fall through to
+ * Per-host rule tables, keyed by `URL.hostname`. Each
+ * entry is either a single {@link Rule} or an array of
+ * rules tried in order. The dispatcher matches the
+ * request's hostname against these keys; unknown
+ * hostnames fall through to
  * {@link DispatcherConfig.notFound}.
  */
 export type HostRules<E = unknown> = Readonly<
-  Record<string, readonly Rule<E>[]>
+  Record<string, readonly Rule<E>[] | Rule<E>>
 >;
 
 /**

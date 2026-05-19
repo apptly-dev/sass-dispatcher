@@ -40,9 +40,9 @@ Routing primitives shared by
   unmolested; `E` defaults to `unknown` for builders
   that ignore env at build time.
 - `Rule<E>` — discriminated union of the rule
-  variants below: `RedirectOptions |
+  variants below: `RedirectOptions<E> |
   TaistampOptions<E>`.
-- `RedirectOptions` — redirect-rule variant
+- `RedirectOptions<E>` — redirect-rule variant
   (see below).
 - `TaistampOptions<E>` — taistamp-rule variant
   (see below).
@@ -50,8 +50,14 @@ Routing primitives shared by
   the 30x family minus 300 (no `Location`), 304
   (conditional), 305 (deprecated) and 306
   (reserved).
-- `HostRules<E>` — `Record<string, readonly Rule<E>[]>`.
-  Per-host rule arrays, keyed by hostname.
+- `ValueOrAccessor<T, E>` — `((env: E) => T) | T`.
+  Used for rule fields whose value can be supplied
+  as a literal or an env-time resolver; unwrapping is
+  per-matched-request. Not usable on fields whose
+  static type is itself a function.
+- `HostRules<E>` — `Record<string, Rule<E> | readonly
+  Rule<E>[]>`. Per host: either a single rule or an
+  ordered array.
 - `HostRouter<E>` — alias for the itty router shape
   used by `newDispatcher` internally and by mounter
   helpers like `mountTaistampHandler` (see the
@@ -65,19 +71,28 @@ Routing primitives shared by
 Per-host rule arrays are tried in order — first match
 wins. Each entry is a `Rule<E>`:
 
-- `RedirectOptions` — `{ redirectTo, redirectCode,
-  match? }`. Static redirect; `redirectTo` is sent
+- `RedirectOptions<E>` — `{ redirectTo, redirectCode,
+  match? }`. Static redirect; `redirectTo` is a
+  literal string or an env-time accessor
+  `(env) => string` (via `ValueOrAccessor`); sent
   verbatim (no `:param` substitution from `match`
   yet). `redirectCode` is narrowed to `RedirectCode`.
   `match` is an itty path pattern and defaults to
   `/*` so a host-wide redirect can omit it.
 - `TaistampOptions<E>` — `{ taistamp }`. Claims
   `/.well-known/taistamp` on the owning host and
-  404s anything under that prefix. `taistamp` is
-  `(env: E) => string`, pulling the secret out of
-  the caller's env. The taistamp draft pins the
-  request URI to the exact path, so no `match`
-  override.
+  404s anything under that prefix. `taistamp` is a
+  literal string or an env-time accessor
+  `(env) => string` (via `ValueOrAccessor`) packing
+  one or more `selector:base64` secrets separated by
+  whitespace, commas, semicolons, pipes, or any
+  character outside the `selector:base64` alphabet.
+  The last entry signs; leading entries are reserved
+  for rotation. Empty, undefined, or delimiter-only
+  input serves unsigned; a malformed entry rejects
+  (strict mode). The lib never names a specific env
+  field. The taistamp draft pins the request URI to
+  the exact path, so no `match` override.
 
 Rules whose shape matches none of the above
 `console.warn` (naming the offending host) and are
@@ -113,14 +128,14 @@ cached handler directly without `newDispatcher`:
 import { newDispatcher } from '@apptly/sass-dispatcher';
 
 interface Env {
-  readonly TAISTAMP_SECRET: string;
+  readonly TAISTAMP_SECRETS?: string;
 }
 
 export default {
   fetch: newDispatcher<Env>({
     hosts: {
       'taistamp.example': [
-        { taistamp: (env) => env.TAISTAMP_SECRET },
+        { taistamp: (env) => env.TAISTAMP_SECRETS ?? '' },
       ],
       'legacy.example': [
         {

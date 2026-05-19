@@ -12,4 +12,5 @@ export {
   type RedirectOptions,
   type Rule,
   type TaistampOptions,
+  type ValueOrAccessor,
 } from './types';
