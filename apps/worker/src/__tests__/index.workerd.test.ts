@@ -7,7 +7,7 @@ describe('worker fetch (workerd pool)', () => {
       'https://dispatcher.example.com/anything',
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(404);
     expect(await response.text()).toBe('sass-dispatcher (stub)\n');
   });
 });
