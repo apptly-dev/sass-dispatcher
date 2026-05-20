@@ -95,11 +95,12 @@ const buildHostRouter = <E>(
 
 /**
  * Build a fetch handler that dispatches by hostname
- * and per-host rule list. For each request the
- * matching host's rules are tried in order via an
- * itty router; if no rule matches (or the host is
- * unknown), the request falls through to
- * `config.notFound` (default: 404 text/plain).
+ * and per-host rule list. Unknown hostnames go to
+ * `config.fallback` (default: `notFound`); a known
+ * host whose rule chain declines goes to
+ * `config.notFound` (default: 404 text/plain). The
+ * `/.well-known/taistamp/*` arm also routes through
+ * `notFound` since the spec reserves that path.
  *
  * Hostname matching is exact — `taistamp.org` does
  * not match `www.taistamp.org`. Add each form as its
@@ -109,6 +110,7 @@ export const newDispatcher = <E>(
   config: DispatcherConfig<E> = {},
 ): ExportedHandlerFetchHandler<E> => {
   const notFound: Handler<E> = config.notFound ?? defaultNotFound;
+  const fallback: Handler<E> = config.fallback ?? notFound;
   const buildOptions: BuildOptions<E> = { notFound };
   const routers = new Map(
     Object.entries(config.hosts ?? {}).map(
@@ -120,9 +122,10 @@ export const newDispatcher = <E>(
   return async (request, env, context) => {
     const u = new URL(request.url);
     const router = routers.get(u.hostname);
-    const response: Response | undefined = router ?
-      await router.fetch(request, env, context) :
-      undefined;
+    if (router === undefined) {
+      return fallback(request, env, context);
+    }
+    const response = await router.fetch(request, env, context);
     return response ?? notFound(request, env, context);
   };
 };

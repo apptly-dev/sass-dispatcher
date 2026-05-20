@@ -149,7 +149,7 @@ export type Rule<E = unknown> =
  * rules tried in order. The dispatcher matches the
  * request's hostname against these keys; unknown
  * hostnames fall through to
- * {@link DispatcherConfig.notFound}.
+ * {@link DispatcherConfig.fallback}.
  */
 export type HostRules<E = unknown> = Readonly<
   Record<string, readonly Rule<E>[] | Rule<E>>
@@ -157,8 +157,20 @@ export type HostRules<E = unknown> = Readonly<
 
 /**
  * Configuration accepted by {@link newDispatcher}.
+ *
+ * `notFound` is the custom 404 handler for "this host
+ * is configured but the request didn't match any rule"
+ * — including spec-protected paths like
+ * `/.well-known/taistamp/*`. Defaults to a framework
+ * 404 (`text/plain` body `"Not Found\n"`).
+ *
+ * `fallback` is the end-of-line catch-all for "this
+ * hostname is not in the table at all". Defaults to
+ * `notFound`, so callers who don't care about the
+ * distinction can set just one.
  */
 export interface DispatcherConfig<E = unknown> {
+  readonly fallback?: Handler<E>
   readonly hosts?: HostRules<E>
   readonly notFound?: Handler<E>
 }

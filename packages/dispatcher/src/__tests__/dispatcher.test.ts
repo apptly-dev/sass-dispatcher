@@ -33,9 +33,9 @@ describe('newDispatcher', () => {
     expect(await response.text()).toBe('Not Found\n');
   });
 
-  it('honours a custom notFound handler', async () => {
+  it('honours a custom fallback handler for unknown hosts', async () => {
     const dispatch = newDispatcher({
-      notFound: () => new Response('gone', { status: 410 }),
+      fallback: () => new Response('gone', { status: 410 }),
     });
 
     const response = await dispatch(
@@ -48,14 +48,14 @@ describe('newDispatcher', () => {
     expect(await response.text()).toBe('gone');
   });
 
-  it('passes request, env, and context to notFound', async () => {
+  it('passes request, env, and context to fallback', async () => {
     const seen: {
       context?: ExecutionContext
       env?: { tag: string }
       request?: Request<unknown, IncomingRequestCfProperties>
     } = {};
     const dispatch = newDispatcher<{ tag: string }>({
-      notFound: (request, env, context) => {
+      fallback: (request, env, context) => {
         seen.request = request;
         seen.env = env;
         seen.context = context;
@@ -71,6 +71,42 @@ describe('newDispatcher', () => {
     expect(seen.request).toBe(request);
     expect(seen.env).toBe(env);
     expect(seen.context).toBe(executionContext);
+  });
+
+  describe('with both fallback and notFound set', () => {
+    const dispatch = newDispatcher({
+      fallback: () => new Response('fallback', { status: 410 }),
+      hosts: {
+        'example.com': [{
+          match: '/foo',
+          redirectTo: 'https://elsewhere.test/',
+          redirectCode: 301,
+        }],
+      },
+      notFound: () => new Response('not found', { status: 404 }),
+    });
+
+    it('routes known-host no-match to notFound, not fallback', async () => {
+      const response = await dispatch(
+        newIncoming('https://example.com/bar'),
+        {},
+        executionContext,
+      );
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe('not found');
+    });
+
+    it('routes unknown host to fallback, not notFound', async () => {
+      const response = await dispatch(
+        newIncoming('https://other.test/'),
+        {},
+        executionContext,
+      );
+
+      expect(response.status).toBe(410);
+      expect(await response.text()).toBe('fallback');
+    });
   });
 
   it('serves taistamp on the configured host', async () => {

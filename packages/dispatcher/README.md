@@ -10,10 +10,14 @@ Routing primitives shared by
   `ExportedHandlerFetchHandler<E>` that dispatches by
   `URL.hostname`. Each configured host gets an itty
   router built at config time; the matching host's
-  rules are tried in order. Unknown hosts and no-match
-  paths fall through to `config.notFound` (default
-  404 `text/plain`). Hostname matching is exact —
-  `taistamp.org` does not match `www.taistamp.org`.
+  rules are tried in order. Known hosts whose rule
+  chain declines (including the spec-protected
+  `/.well-known/taistamp/*` arm) fall through to
+  `config.notFound`; unknown hostnames fall through
+  to `config.fallback` (which itself defaults to
+  `notFound`). Both default to 404 `text/plain`.
+  Hostname matching is exact — `taistamp.org` does
+  not match `www.taistamp.org`.
 - `newHandlerStore(builder)` — per-isolate memoising
   store. Binds a builder + optional options type `T`
   to a `Map<K, Promise<Handler<E>>>` and returns a
@@ -68,7 +72,11 @@ Routing primitives shared by
   callers building their own router can type the
   variable.
 - `DispatcherConfig<E>` — `{ hosts?: HostRules<E>;
-  notFound? }`.
+  notFound?: Handler<E>; fallback?: Handler<E> }`.
+  `notFound` is the configured 404 for known hosts
+  whose rules all decline (and for the taistamp `/*`
+  arm); `fallback` is the catch-all for hostnames
+  not in `hosts` and defaults to `notFound`.
 
 ## Rule variants
 
