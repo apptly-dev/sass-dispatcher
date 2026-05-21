@@ -24,6 +24,20 @@ Routing primitives shared by
   synchronous factory `(key, options?) => Handler<E>`
   whose handlers transparently await the cached
   build on first request.
+- `newKeyedHandlerStore(builder, toKey)` — sibling of
+  `newHandlerStore` for cases where the natural input
+  isn't a sensible `Map` key (object identity, equal-
+  content distinct objects). Returns a factory
+  `(input: T) => Handler<E>`; the cache is keyed by
+  `toKey(input)`. The builder receives both the
+  derived key and the input.
+- `newSingleton(builder)` — lower-level memoisation
+  primitive that both `newHandlerStore` and
+  `newKeyedHandlerStore` build on. Caches an async
+  build per-key; concurrent callers share the
+  in-flight promise; rejections evict. Use directly
+  when you need per-key memoisation but not the
+  dispatcher's `Handler` shape.
 - `Handler<E>` — `(request: Request<unknown,
   IncomingRequestCfProperties>, env?: E, context?:
   ExecutionContext) => Promise<Response> | Response`.
@@ -43,6 +57,11 @@ Routing primitives shared by
   value may legitimately be absent flow in
   unmolested; `E` defaults to `unknown` for builders
   that ignore env at build time.
+- `KeyedHandlerBuilder<T, K, E>` — `(key, input: T,
+  env?: E) => Handler<E> | Promise<Handler<E>>`.
+  Sibling of `HandlerBuilder` with required `input`;
+  consumed by `newKeyedHandlerStore`. `K` defaults to
+  `string`.
 - `Rule<E>` — discriminated union of the rule
   variants below: `HandlerOptions<E> |
   RedirectOptions<E> | ServiceOptions<E> |
@@ -216,3 +235,94 @@ A rejected build is evicted from the cache; the next
 call retries. The cache has no eviction beyond that,
 so keys should be a bounded set (secrets, bindings)
 rather than per-request data.
+
+## `newKeyedHandlerStore` in use
+
+```ts
+import {
+  type Handler,
+  newKeyedHandlerStore,
+} from '@apptly/sass-dispatcher';
+
+interface Target {
+  readonly host: string
+  readonly path: string
+}
+
+const buildTargetHandler = (
+  _key: string,
+  target: Target,
+): Handler =>
+  (request) =>
+    new Response(`routed to ${target.host}${target.path}`);
+
+const serialiseTarget = (target: Target): string =>
+  `${target.host}|${target.path}`;
+
+const handlerFor = newKeyedHandlerStore(
+  buildTargetHandler,
+  serialiseTarget,
+);
+
+export default {
+  async fetch(request) {
+    const target: Target = { host: 'upstream.test', path: '/' };
+    return handlerFor(target)(request);
+  },
+};
+```
+
+The factory `(input: T) => Handler<E>` takes the
+natural input; the derived key is opaque to callers.
+`toKey` runs on every invocation (cheap, pure); the
+build runs on cache miss. Two equal-content distinct
+inputs share one build because their derived keys
+collide.
+
+Once a key is cached, later calls with a different
+`input` reuse the originally-built handler — the
+input bound to the cached build is the one from the
+first call. If a build-affecting field isn't in the
+key, distinct-input/same-key callers reuse the wrong
+handler; ensure every field the builder reads
+contributes to `toKey`.
+
+## `newSingleton` in use
+
+```ts
+import { newSingleton } from '@apptly/sass-dispatcher';
+
+const tokenFor = newSingleton<string, string>(
+  async (org) => {
+    const response = await fetch(
+      `https://api.example/orgs/${org}/token`,
+    );
+    return response.text();
+  },
+);
+
+// First call per `org` triggers the async build;
+// concurrent callers share the in-flight promise.
+// Later calls per the same `org` reuse the cached
+// token.
+const token = await tokenFor('apptly');
+```
+
+Trailing args pass through to the builder on the first
+call and are ignored on cache hits, so the args from
+whichever caller triggered the build bind into the
+cached value:
+
+```ts
+const labelFor = newSingleton<string, string, [string]>(
+  (key, suffix) => `${key}:${suffix}`,
+);
+
+await labelFor('a', 'one'); // 'a:one'
+await labelFor('a', 'two'); // 'a:one' — first call wins
+```
+
+Rejection semantics match `newHandlerStore`: a rejected
+build is evicted so the next call retries; the cache has
+no eviction beyond that, so keys should be a bounded
+set.
