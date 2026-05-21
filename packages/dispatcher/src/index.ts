@@ -6,12 +6,15 @@ export {
   newKeyedHandlerStore,
   newSingleton,
 } from './handler-store';
+export { proxyHandler } from './proxy';
 export {
   type DispatcherConfig,
   type Handler,
   type HandlerOptions,
   type HostRouter,
   type HostRules,
+  type ProxyOptions,
+  type ProxyTarget,
   type RedirectCode,
   type RedirectOptions,
   type Rule,

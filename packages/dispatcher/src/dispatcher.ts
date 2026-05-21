@@ -11,6 +11,7 @@ import type {
   Rule,
   ServiceOptions,
 } from './types';
+import { proxyHandler } from './proxy';
 import { mountTaistampHandler } from './taistamp';
 import { getValue } from './value';
 
@@ -69,6 +70,10 @@ const buildHostRouter = <E>(
     if ('handler' in rule) {
       // caller-supplied Handler.
       mountHandler(router, rule);
+    } else if ('proxyTo' in rule) {
+      // reverse-proxy via global `fetch`.
+      router.all(rule.match ?? '/*', (request, env, context) =>
+        proxyHandler(getValue(rule.proxyTo, env))(request, env, context));
     } else if ('redirectTo' in rule) {
       // host- or path-scoped redirect.
       mountRedirectHandler(router, rule);
@@ -84,8 +89,8 @@ const buildHostRouter = <E>(
       // than crash at construction.
       console.warn(
         `[sass-dispatcher] ${host}: rule has no recognised ` +
-        'discriminant (handler/redirectTo/service/taistamp), ' +
-        'skipping:',
+        'discriminant ' +
+        '(handler/proxyTo/redirectTo/service/taistamp), skipping:',
         rule,
       );
     }

@@ -134,11 +134,41 @@ export interface ServiceOptions<E = unknown> {
 }
 
 /**
+ * Target descriptor for the `proxyTo` rule and the
+ * underlying `proxyHandler`. The `target` URL
+ * contributes proto + host + port; the inbound
+ * path/query are appended verbatim. `resolveOverride`
+ * (optional) is forwarded to Cloudflare's
+ * `cf.resolveOverride` so DNS can point at a sibling
+ * zone while the public URL keeps the user-facing host.
+ */
+export interface ProxyTarget {
+  readonly target: string | URL
+
+  readonly resolveOverride?: string
+}
+
+/**
+ * Reverse-proxy variant of {@link Rule}. Forwards any
+ * path matching `match` (default `/*`) to
+ * {@link ProxyTarget} via the global `fetch`.
+ * `proxyTo` accepts a literal {@link ProxyTarget} or
+ * an env-time accessor `(env) => ProxyTarget` via
+ * {@link ValueOrAccessor}, so the descriptor can be
+ * assembled from env at request time.
+ */
+export interface ProxyOptions<E = unknown> {
+  readonly match?: string
+  readonly proxyTo: ValueOrAccessor<ProxyTarget, E>
+}
+
+/**
  * A single dispatch rule. Per-host rule arrays are
  * tried in order — first match wins.
  */
 export type Rule<E = unknown> =
   | HandlerOptions<E> |
+  ProxyOptions<E> |
   RedirectOptions<E> |
   ServiceOptions<E> |
   TaistampOptions<E>;

@@ -29,8 +29,9 @@ Routing primitives shared by
   isn't a sensible `Map` key (object identity, equal-
   content distinct objects). Returns a factory
   `(input: T) => Handler<E>`; the cache is keyed by
-  `toKey(input)`. The builder receives both the
-  derived key and the input.
+  `toKey(input)`. The builder receives the input only;
+  call `toKey` inside if it needs the canonicalised
+  key.
 - `newSingleton(builder)` — lower-level memoisation
   primitive that both `newHandlerStore` and
   `newKeyedHandlerStore` build on. Caches an async
@@ -38,6 +39,17 @@ Routing primitives shared by
   in-flight promise; rejections evict. Use directly
   when you need per-key memoisation but not the
   dispatcher's `Handler` shape.
+- `proxyHandler(target)` — builds a `Handler` that
+  reverse-proxies the inbound request to `target` via
+  the global `fetch`. Client-provided forwarding
+  headers are stripped before authoritative
+  `x-forwarded-*` are set from the inbound envelope.
+- `ProxyTarget` — `{ target: string | URL;
+  resolveOverride?: string }`. Descriptor for the
+  `proxyTo` rule and `proxyHandler`. `resolveOverride`
+  redirects DNS through Cloudflare's
+  `cf.resolveOverride` without changing the public
+  URL or `Host` header.
 - `Handler<E>` — `(request: Request<unknown,
   IncomingRequestCfProperties>, env?: E, context?:
   ExecutionContext) => Promise<Response> | Response`.
@@ -57,16 +69,18 @@ Routing primitives shared by
   value may legitimately be absent flow in
   unmolested; `E` defaults to `unknown` for builders
   that ignore env at build time.
-- `KeyedHandlerBuilder<T, K, E>` — `(key, input: T,
-  env?: E) => Handler<E> | Promise<Handler<E>>`.
-  Sibling of `HandlerBuilder` with required `input`;
-  consumed by `newKeyedHandlerStore`. `K` defaults to
-  `string`.
+- `KeyedHandlerBuilder<T, E>` — `(input: T, env?: E) =>
+  Handler<E> | Promise<Handler<E>>`. Consumed by
+  `newKeyedHandlerStore`. The derived cache key is not
+  passed in — call `toKey` inside if you need the
+  canonicalised form.
 - `Rule<E>` — discriminated union of the rule
   variants below: `HandlerOptions<E> |
-  RedirectOptions<E> | ServiceOptions<E> |
-  TaistampOptions<E>`.
+  ProxyOptions<E> | RedirectOptions<E> |
+  ServiceOptions<E> | TaistampOptions<E>`.
 - `HandlerOptions<E>` — handler-rule variant
+  (see below).
+- `ProxyOptions<E>` — proxy-rule variant
   (see below).
 - `RedirectOptions<E>` — redirect-rule variant
   (see below).
@@ -107,6 +121,11 @@ wins. Each entry is a `Rule<E>`:
   directly on any path matching `match` (an itty
   path pattern, default `/*`). For behaviour none of
   the other variants cover.
+- `ProxyOptions<E>` — `{ proxyTo, match? }`.
+  Reverse-proxy via the global `fetch` for any path
+  matching `match` (default `/*`). `proxyTo` is a
+  literal `ProxyTarget` or an env-time accessor
+  `(env) => ProxyTarget` (via `ValueOrAccessor`).
 - `RedirectOptions<E>` — `{ redirectTo, redirectCode,
   match? }`. Static redirect; `redirectTo` is a
   literal string or an env-time accessor
@@ -249,10 +268,7 @@ interface Target {
   readonly path: string
 }
 
-const buildTargetHandler = (
-  _key: string,
-  target: Target,
-): Handler =>
+const buildTargetHandler = (target: Target): Handler =>
   (request) =>
     new Response(`routed to ${target.host}${target.path}`);
 

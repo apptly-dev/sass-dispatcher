@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { newDispatcher, type Rule } from '..';
 
@@ -472,6 +472,62 @@ describe('newDispatcher', () => {
     expect(serviceFetch).toHaveBeenCalledTimes(1);
   });
 
+  describe('proxyTo', () => {
+    const mockFetch = vi.fn<typeof fetch>();
+
+    beforeEach(() => {
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValue(new Response('via proxy', { status: 200 }));
+      vi.stubGlobal('fetch', mockFetch);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('delegates to a proxy target', async () => {
+      const dispatch = newDispatcher({
+        hosts: {
+          'example.com': [{
+            proxyTo: { target: 'https://upstream.test' },
+          }],
+        },
+      });
+
+      const response = await dispatch(
+        newIncoming('https://example.com/some/path?q=1'),
+        {},
+        executionContext,
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('via proxy');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const out = mockFetch.mock.calls[0]?.[0] as Request;
+      expect(out.url).toBe('https://upstream.test/some/path?q=1');
+    });
+
+    it('accepts an env-time accessor', async () => {
+      const dispatch = newDispatcher<{ upstream: string }>({
+        hosts: {
+          'example.com': [{
+            proxyTo: (env) => ({ target: env.upstream }),
+          }],
+        },
+      });
+
+      await dispatch(
+        newIncoming('https://example.com/path'),
+        { upstream: 'https://chosen.test' },
+        executionContext,
+      );
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const out = mockFetch.mock.calls[0]?.[0] as Request;
+      expect(out.url).toBe('https://chosen.test/path');
+    });
+  });
+
   it('warns and skips rules without a recognised discriminant', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -488,6 +544,7 @@ describe('newDispatcher', () => {
       const [message, rule] = call as [string, unknown];
       expect(message).toContain('example.com');
       expect(message).toContain('skipping');
+      expect(message).toContain('proxyTo');
       expect(rule).toEqual({ kind: 'unknown' });
 
       const response = await dispatch(
