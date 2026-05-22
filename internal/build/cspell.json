@@ -13,6 +13,8 @@
     "obuild",
     "poupe",
     "prepack",
+    "publint",
+    "saas",
     "taistamp",
     "unstub",
     "vitest",
