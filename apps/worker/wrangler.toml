@@ -1,4 +1,4 @@
-# cspell:words sass miniflare
+# cSpell:words sass
 # TODO: set account_id before deploying.
 # account_id = ""
 name = "sass-dispatcher"
@@ -17,7 +17,28 @@ compatibility_flags = [
   "enable_nodejs_process_v2",
 ]
 
+# TAISTAMP_SECRETS signs /.well-known/taistamp responses.
+# Holds one or more `selector:base64` secrets separated by
+# whitespace, commas, semicolons, pipes, etc.; the last
+# entry signs, leading entries are reserved for rotation.
+# Absent / empty falls through to unsigned labels.
+#
+# Setting it depends on the upload path:
+#  - `wrangler deploy`: `wrangler secret put TAISTAMP_SECRETS`.
+#  - Workers Builds (CI): a secret-typed dashboard build
+#    variable. A plain-text variable re-binds an empty
+#    string on every `versions upload` and displaces any
+#    per-version `secret put`.
+
 [dev]
 ip = "0.0.0.0"
 
-# Bindings (D1, KV, R2, services) go here as the dispatcher grows.
+# Service bindings — delegate apptly.co traffic to the
+# apptly-website worker via the `service` dispatcher rule.
+# The target worker must be deployed under that exact name
+# in the same account.
+[[services]]
+binding = "APPTLY_WEBSITE"
+service = "apptly-website"
+
+# Bindings (D1, KV, R2) go here as the dispatcher grows.
