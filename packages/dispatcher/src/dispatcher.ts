@@ -1,6 +1,7 @@
 import { IttyRouter } from 'itty-router';
 
 import type {
+  BuildOptions,
   CfRequest,
   DispatcherConfig,
   Handler,
@@ -35,17 +36,18 @@ const mountRedirectHandler = <E>(
 const buildHostRouter = <E>(
   host: string,
   rules: readonly Rule<E>[] | Rule<E>,
+  buildOptions: BuildOptions<E>,
 ): HostRouter<E> => {
   const router: HostRouter<E> = IttyRouter<
     CfRequest,
     [E, ExecutionContext],
     Response | undefined
   >();
-
-  for (const rule of Array.isArray(rules) ? rules : [rules]) {
+  const ruleList: readonly Rule<E>[] = Array.isArray(rules) ? rules : [rules];
+  for (const rule of ruleList) {
     if ('taistamp' in rule) {
       // /.well-known/taistamp + sibling 404.
-      mountTaistampHandler(router, rule);
+      mountTaistampHandler(router, rule, buildOptions);
     } else if ('redirectTo' in rule) {
       // host- or path-scoped redirect.
       mountRedirectHandler(router, rule);
@@ -79,9 +81,11 @@ export const newDispatcher = <E>(
   config: DispatcherConfig<E> = {},
 ): ExportedHandlerFetchHandler<E> => {
   const notFound: Handler<E> = config.notFound ?? defaultNotFound;
+  const buildOptions: BuildOptions<E> = { notFound };
   const routers = new Map(
     Object.entries(config.hosts ?? {}).map(
-      ([host, rules]) => [host, buildHostRouter(host, rules)] as const,
+      ([host, rules]) =>
+        [host, buildHostRouter(host, rules, buildOptions)] as const,
     ),
   );
 

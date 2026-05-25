@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { newDispatcher } from '..';
+import { newDispatcher, type Rule } from '..';
 
 const executionContext = {} as ExecutionContext;
 
@@ -225,6 +225,136 @@ describe('newDispatcher', () => {
     );
     expect(onOther.status).toBe(301);
     expect(onOther.headers.get('location')).toBe('https://elsewhere.test/');
+  });
+
+  it('defaults match to /* when omitted from a redirect rule', async () => {
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': [
+          {
+            redirectTo: 'https://elsewhere.test/',
+            redirectCode: 301,
+          },
+        ],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/any/deep/path'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe('https://elsewhere.test/');
+  });
+
+  it('redirectTo accepts an env-time accessor', async () => {
+    const dispatch = newDispatcher<{ target: string }>({
+      hosts: {
+        'example.com': [
+          {
+            redirectTo: (env) => env.target,
+            redirectCode: 302,
+          },
+        ],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/'),
+      { target: 'https://resolved.test/landing' },
+      executionContext,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(
+      'https://resolved.test/landing',
+    );
+  });
+
+  it('taistamp accepts a literal secret', async () => {
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': [{ taistamp: '' }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/.well-known/taistamp'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/tai64n');
+  });
+
+  it('accepts a single rule for a host (not wrapped in an array)', async () => {
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': {
+          redirectTo: 'https://elsewhere.test/',
+          redirectCode: 301,
+        },
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/any'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe('https://elsewhere.test/');
+  });
+
+  it('uses the configured notFound under the taistamp prefix', async () => {
+    const dispatch = newDispatcher<{ secret: string }>({
+      notFound: () => new Response('teapot', { status: 418 }),
+      hosts: {
+        'example.com': [{ taistamp: (env) => env.secret }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/.well-known/taistamp/sub'),
+      { secret: '' },
+      executionContext,
+    );
+
+    expect(response.status).toBe(418);
+    expect(await response.text()).toBe('teapot');
+  });
+
+  it('warns and skips rules without a recognised discriminant', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const dispatch = newDispatcher({
+        hosts: {
+          'example.com': [{ kind: 'unknown' } as unknown as Rule],
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const call = warnSpy.mock.calls[0];
+      expect(call).toBeDefined();
+      const [message, rule] = call as [string, unknown];
+      expect(message).toContain('example.com');
+      expect(message).toContain('skipping');
+      expect(rule).toEqual({ kind: 'unknown' });
+
+      const response = await dispatch(
+        newIncoming('https://example.com/any'),
+        {},
+        executionContext,
+      );
+      expect(response.status).toBe(404);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('honours rule order — redirect catch-all before taistamp', async () => {

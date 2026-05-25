@@ -88,6 +88,14 @@ export type Handler<E = unknown> = (
 ) => Promise<Response> | Response;
 
 /**
+ * Build-time context passed to `mount*Handler` helpers
+ * by `buildHostRouter`.
+ */
+export interface BuildOptions<E = unknown> {
+  readonly notFound: Handler<E>
+}
+
+/**
  * Rule-field value supplied either as a bare `T` or as
  * an env-time resolver `(env: E) => T`. The dispatcher
  * unwraps the function form on each matching request.

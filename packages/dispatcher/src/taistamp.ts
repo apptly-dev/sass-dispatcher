@@ -2,7 +2,7 @@ import { parseSecretsToKeys, splitLast } from '@kagal/ed25519-secret';
 import { newTaistampHandler, TAISTAMP_PATH } from '@kagal/taistamp';
 
 import type { HandlerBuilder } from './handler-store';
-import type { HostRouter, TaistampOptions } from './types';
+import type { BuildOptions, HostRouter, TaistampOptions } from './types';
 import { newHandlerStore } from './handler-store';
 import { getValue } from './value';
 
@@ -49,34 +49,18 @@ const buildTaistamp: HandlerBuilder<undefined> = async (secrets) => {
  */
 export const taistampHandler = newHandlerStore(buildTaistamp);
 
-// The taistamp draft restricts taistamp requests to
-// the exact path (§5: "the request URI MUST be the
-// exact path above"); we 404 siblings here rather
-// than deferring to the dispatcher's `notFound`, so a
-// custom fallback can't serve unrelated content under
-// the well-known namespace.
-const taistampPrefixNotFound = (): Response =>
-  new Response('Not Found\n', {
-    status: 404,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-  });
-
-/**
- * Mount the taistamp variant onto a host router:
- * `/.well-known/taistamp` serves the cached handler
- * resolved per request from
- * `getValue(options.taistamp, env)` (literal string
- * or env-time accessor); anything under the prefix
- * 404s, since the taistamp draft pins the request URI
- * to the exact path.
- */
 export const mountTaistampHandler = <E>(
   router: HostRouter<E>,
   options: TaistampOptions<E>,
+  buildOptions: BuildOptions<E>,
 ): void => {
+  // `/.well-known/taistamp` serves the cached handler
+  // resolved per request from `options.taistamp`
+  // (literal string or env-time accessor); anything
+  // under the prefix 404s via `buildOptions.notFound`.
   router.all(TAISTAMP_PATH, (request, env, context) =>
     taistampHandler(getValue(options.taistamp, env))(request, env, context));
-  router.all(`${TAISTAMP_PATH}/*`, taistampPrefixNotFound);
+  router.all(`${TAISTAMP_PATH}/*`, buildOptions.notFound);
 };
 
 export { type Handler } from './types';

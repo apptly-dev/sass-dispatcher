@@ -59,10 +59,9 @@ Routing primitives shared by
   Rule<E>[]>`. Per host: either a single rule or an
   ordered array.
 - `HostRouter<E>` — alias for the itty router shape
-  used by `newDispatcher` internally and by mounter
-  helpers like `mountTaistampHandler` (see the
-  `./taistamp` subpath below). Exported so callers
-  building their own router can type the variable.
+  used by `newDispatcher` internally. Exported so
+  callers building their own router can type the
+  variable.
 - `DispatcherConfig<E>` — `{ hosts?: HostRules<E>;
   notFound? }`.
 
@@ -101,16 +100,10 @@ type-system bypass (cast, JSON import, etc.).
 
 ## `./taistamp` subpath
 
-The taistamp variant's building blocks are also
-exposed at `@apptly/sass-dispatcher/taistamp` for
-callers mounting on their own router or using the
-cached handler directly without `newDispatcher`:
+The taistamp building blocks are also exposed at
+`@apptly/sass-dispatcher/taistamp` for callers using
+the cached handler directly without `newDispatcher`:
 
-- `mountTaistampHandler(router, options)` —
-  registers `/.well-known/taistamp` + the sibling
-  404 on the given `HostRouter<E>`. The same
-  wiring `newDispatcher` does internally for a
-  `TaistampOptions<E>` rule.
 - `taistampHandler(secrets)` — per-isolate cached
   `Handler` factory; pass the parsed secret string
   (or `undefined` / `''` for the unsigned
