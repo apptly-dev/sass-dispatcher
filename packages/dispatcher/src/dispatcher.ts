@@ -5,9 +5,11 @@ import type {
   CfRequest,
   DispatcherConfig,
   Handler,
+  HandlerOptions,
   HostRouter,
   RedirectOptions,
   Rule,
+  ServiceOptions,
 } from './types';
 import { mountTaistampHandler } from './taistamp';
 import { getValue } from './value';
@@ -17,6 +19,15 @@ const defaultNotFound: Handler = () =>
     status: 404,
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
+
+const mountHandler = <E>(
+  router: HostRouter<E>,
+  options: HandlerOptions<E>,
+): void => {
+  // Escape hatch: mount a caller-supplied Handler on
+  // any path matching `match` (default `/*`).
+  router.all(options.match ?? '/*', options.handler);
+};
 
 const mountRedirectHandler = <E>(
   router: HostRouter<E>,
@@ -33,6 +44,16 @@ const mountRedirectHandler = <E>(
     }));
 };
 
+const mountServiceHandler = <E>(
+  router: HostRouter<E>,
+  options: ServiceOptions<E>,
+): void => {
+  // Hand off to a Cloudflare service binding (RPC
+  // worker-to-worker, bypasses DNS).
+  router.all(options.match ?? '/*', (request, env) =>
+    getValue(options.service, env).fetch(request));
+};
+
 const buildHostRouter = <E>(
   host: string,
   rules: readonly Rule<E>[] | Rule<E>,
@@ -45,19 +66,26 @@ const buildHostRouter = <E>(
   >();
   const ruleList: readonly Rule<E>[] = Array.isArray(rules) ? rules : [rules];
   for (const rule of ruleList) {
-    if ('taistamp' in rule) {
-      // /.well-known/taistamp + sibling 404.
-      mountTaistampHandler(router, rule, buildOptions);
+    if ('handler' in rule) {
+      // caller-supplied Handler.
+      mountHandler(router, rule);
     } else if ('redirectTo' in rule) {
       // host- or path-scoped redirect.
       mountRedirectHandler(router, rule);
+    } else if ('service' in rule) {
+      // Cloudflare service-binding delegation.
+      mountServiceHandler(router, rule);
+    } else if ('taistamp' in rule) {
+      // /.well-known/taistamp + sibling 404.
+      mountTaistampHandler(router, rule, buildOptions);
     } else {
       // Reachable only if the type system was bypassed
       // (cast, JSON import, etc.); log + skip rather
       // than crash at construction.
       console.warn(
         `[sass-dispatcher] ${host}: rule has no recognised ` +
-        'discriminant (redirectTo/taistamp), skipping:',
+        'discriminant (handler/redirectTo/service/taistamp), ' +
+        'skipping:',
         rule,
       );
     }

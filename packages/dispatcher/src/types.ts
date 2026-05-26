@@ -107,12 +107,41 @@ export interface BuildOptions<E = unknown> {
 export type ValueOrAccessor<T, E = unknown> = ((env: E) => T) | T;
 
 /**
- * A single dispatch rule. Per-host rule arrays are
- * tried in order — first match wins. Each variant
- * pairs with a `mount*Handler` colocated with the
- * variant's implementation.
+ * Escape-hatch variant of {@link Rule}: mounts a
+ * caller-supplied {@link Handler} directly on any
+ * path matching `match` (an itty path pattern,
+ * default `/*`). Used when no other rule variant
+ * fits.
  */
-export type Rule<E = unknown> = RedirectOptions<E> | TaistampOptions<E>;
+export interface HandlerOptions<E = unknown> {
+  readonly handler: Handler<E>
+  readonly match?: string
+}
+
+/**
+ * Service-binding variant of {@link Rule}. Delegates
+ * any path matching `match` (default `/*`) to a
+ * Cloudflare service binding by calling
+ * `binding.fetch(request)`. `service` accepts a
+ * literal {@link Fetcher} or an env-time accessor
+ * `(env) => Fetcher` via {@link ValueOrAccessor}, so
+ * the binding is named through the env type rather
+ * than hard-coded.
+ */
+export interface ServiceOptions<E = unknown> {
+  readonly match?: string
+  readonly service: ValueOrAccessor<Fetcher, E>
+}
+
+/**
+ * A single dispatch rule. Per-host rule arrays are
+ * tried in order — first match wins.
+ */
+export type Rule<E = unknown> =
+  | HandlerOptions<E> |
+  RedirectOptions<E> |
+  ServiceOptions<E> |
+  TaistampOptions<E>;
 
 /**
  * Per-host rule tables, keyed by `URL.hostname`. Each

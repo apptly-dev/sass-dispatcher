@@ -40,9 +40,14 @@ Routing primitives shared by
   unmolested; `E` defaults to `unknown` for builders
   that ignore env at build time.
 - `Rule<E>` — discriminated union of the rule
-  variants below: `RedirectOptions<E> |
+  variants below: `HandlerOptions<E> |
+  RedirectOptions<E> | ServiceOptions<E> |
   TaistampOptions<E>`.
+- `HandlerOptions<E>` — handler-rule variant
+  (see below).
 - `RedirectOptions<E>` — redirect-rule variant
+  (see below).
+- `ServiceOptions<E>` — service-rule variant
   (see below).
 - `TaistampOptions<E>` — taistamp-rule variant
   (see below).
@@ -70,6 +75,11 @@ Routing primitives shared by
 Per-host rule arrays are tried in order — first match
 wins. Each entry is a `Rule<E>`:
 
+- `HandlerOptions<E>` — `{ handler, match? }`.
+  Escape hatch: mounts a caller-supplied `Handler<E>`
+  directly on any path matching `match` (an itty
+  path pattern, default `/*`). For behaviour none of
+  the other variants cover.
 - `RedirectOptions<E>` — `{ redirectTo, redirectCode,
   match? }`. Static redirect; `redirectTo` is a
   literal string or an env-time accessor
@@ -78,6 +88,12 @@ wins. Each entry is a `Rule<E>`:
   yet). `redirectCode` is narrowed to `RedirectCode`.
   `match` is an itty path pattern and defaults to
   `/*` so a host-wide redirect can omit it.
+- `ServiceOptions<E>` — `{ service, match? }`.
+  Delegates any path matching `match` (default `/*`)
+  to a Cloudflare service binding by calling
+  `binding.fetch(request)`. `service` is a literal
+  `Fetcher` or an env-time accessor
+  `(env) => Fetcher` (via `ValueOrAccessor`).
 - `TaistampOptions<E>` — `{ taistamp }`. Claims
   `/.well-known/taistamp` on the owning host and
   404s anything under that prefix. `taistamp` is a

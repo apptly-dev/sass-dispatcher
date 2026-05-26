@@ -328,6 +328,114 @@ describe('newDispatcher', () => {
     expect(await response.text()).toBe('teapot');
   });
 
+  it('mounts a caller-supplied handler', async () => {
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': [{
+          match: '/hello',
+          handler: () => new Response('handled', { status: 200 }),
+        }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/hello'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('handled');
+  });
+
+  it('defaults match to /* when omitted from a handler rule', async () => {
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': [{
+          handler: () => new Response('catch-all', { status: 200 }),
+        }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/any/deep/path'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('catch-all');
+  });
+
+  it('passes env and context to a caller-supplied handler', async () => {
+    const seen: {
+      context?: ExecutionContext
+      env?: { tag: string }
+    } = {};
+    const dispatch = newDispatcher<{ tag: string }>({
+      hosts: {
+        'example.com': [{
+          handler: (_request, env, context) => {
+            seen.env = env;
+            seen.context = context;
+            return new Response('ok');
+          },
+        }],
+      },
+    });
+
+    const env = { tag: 'handler-env' };
+    await dispatch(newIncoming('https://example.com/'), env, executionContext);
+
+    expect(seen.env).toBe(env);
+    expect(seen.context).toBe(executionContext);
+  });
+
+  it('delegates to a service binding', async () => {
+    const serviceFetch = vi.fn().mockResolvedValue(
+      new Response('via service', { status: 200 }),
+    );
+    const service = { fetch: serviceFetch } as unknown as Fetcher;
+    const dispatch = newDispatcher({
+      hosts: {
+        'example.com': [{ service }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/whatever'),
+      {},
+      executionContext,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('via service');
+    expect(serviceFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('service accepts an env-time accessor', async () => {
+    const serviceFetch = vi.fn().mockResolvedValue(
+      new Response('via env service'),
+    );
+    const service = { fetch: serviceFetch } as unknown as Fetcher;
+    const dispatch = newDispatcher<{ binding: Fetcher }>({
+      hosts: {
+        'example.com': [{
+          service: (env) => env.binding,
+        }],
+      },
+    });
+
+    const response = await dispatch(
+      newIncoming('https://example.com/'),
+      { binding: service },
+      executionContext,
+    );
+
+    expect(await response.text()).toBe('via env service');
+    expect(serviceFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('warns and skips rules without a recognised discriminant', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
